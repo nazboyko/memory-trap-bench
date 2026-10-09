@@ -13,6 +13,9 @@ built in reverse order takes 1.25 times the memory of the same numbers from
 storing keys in PHP 8.2. The benchmark asks whether a model knows the rule,
 the runtime, or the version.
 
+Guess first, then see the measurement:
+[nazboyko.github.io/memory-trap-bench](https://nazboyko.github.io/memory-trap-bench/).
+
 Model results come from three Kaggle Benchmarks tasks. They are pending until
 the Kaggle runs finish; see [results/REPORT.md](results/REPORT.md).
 
@@ -134,8 +137,8 @@ open weights: `gemini-3.5-flash-lite`, `gemini-3.8-flash`,
 - One machine type per version (GitHub's ubuntu-24.04 runner). Other builds,
   allocators and architectures can give other numbers; the local Go 1.26
   readings on darwin/arm64 are kept as a cross-check.
-- The Kaggle model proxy ignores the temperature setting, so a rerun can
-  differ.
+- The `kaggle-benchmarks` library sends no temperature through the Kaggle
+  model proxy (`support_temperature` is False there), so a rerun can differ.
 - The estimate tolerance (0.67x to 1.5x) is wide on purpose; the answer and
   the mechanism carry two thirds of the score.
 - The human baseline is one developer.

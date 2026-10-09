@@ -63,7 +63,7 @@ PILOT = {
     "name": "MemoryTrap Pilot A",
     "function": "memtrap_pilot",
     "title": "MemoryTrap Bench: pilot",
-    "description": "Pilot run of the MemoryTrap Bench cold condition on a few items, to check prompts and parsing.",
+    "description": TASKS["cold"]["description"],
 }
 
 

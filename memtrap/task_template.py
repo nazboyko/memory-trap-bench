@@ -18,6 +18,7 @@ TEMPLATE = '''# %% [markdown]
 # %%
 import json
 import re
+import time
 
 import kaggle_benchmarks as kbench
 import pandas as pd
@@ -25,6 +26,7 @@ import pandas as pd
 CONDITION = {condition!r}
 ITEM_LIMIT = {item_limit!r}  # None runs every item; the pilot uses a small number
 REPAIR_MESSAGE = "Your reply could not be read. Reply with the JSON object only, nothing else."
+ATTEMPTS = 3  # a nested evaluate() runs each item once, so transient proxy errors are retried here
 
 ITEMS = {items}
 
@@ -40,16 +42,30 @@ if ITEM_LIMIT:
 {score_source}
 
 # %%
+def ask(llm, message: str) -> str:
+    """Send one user message; on an error, ask again for a reply to the same
+    history instead of repeating the message."""
+    for attempt in range(ATTEMPTS):
+        try:
+            if attempt == 0:
+                return llm.prompt(message)
+            return llm.respond().content
+        except Exception:
+            if attempt == ATTEMPTS - 1:
+                raise
+            time.sleep(10 * (attempt + 1))
+
+
 @kbench.task(name={item_task_name!r}, store_task=False, store_run=False)
 def memtrap_item(llm, item_id: str) -> dict:
     """One case under one condition and runtime version."""
     item = ITEMS[item_id]
-    reply = llm.prompt(item["prompt"])
+    reply = ask(llm, item["prompt"])
     parsed = parse_response(reply, unit=item["unit"])
     retried = False
     if parsed is None:
         retried = True
-        reply = llm.prompt(REPAIR_MESSAGE)
+        reply = ask(llm, REPAIR_MESSAGE)
         parsed = parse_response(reply, unit=item["unit"])
     row = score_response(item["case"], item["truth"], item["condition"], item["version"], parsed)
     row["item"] = item_id

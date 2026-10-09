@@ -81,3 +81,28 @@ def test_report_without_runs_has_no_model_numbers(tmp_path):
 def test_report_never_reads_human_files():
     src = (ROOT / "memtrap" / "analyze.py").read_text()
     assert "human/answers" not in src.replace("memtrap.score_human human/answers.json", "")
+
+
+def test_errored_items_are_not_parse_failures(stub_runs):
+    from memtrap.score import summarize
+
+    cases, truth = load_cases(), load_truth()
+    newest, _ = load_runs(stub_runs)
+    entry = newest[("cold", "stub-folklore")]
+    data = json.loads(json.dumps(entry["data"]))
+    data["subruns"] = data["subruns"][:-2]
+    rows, meta = score_run({**entry, "data": data}, cases, truth)
+    s = summarize(rows)
+    assert meta["errored_items"] == 2 and s["parse_failures"] == 0
+    assert sum(r["errored"] for r in rows) == 2
+
+
+def test_stale_prompt_is_not_scored(stub_runs):
+    cases, truth = load_cases(), load_truth()
+    newest, _ = load_runs(stub_runs)
+    entry = newest[("cold", "stub-correct")]
+    data = json.loads(json.dumps(entry["data"]))
+    first = data["subruns"][0]["conversations"][0]["requests"][0]["contents"][0]
+    first["parts"][0]["text"] = "an older prompt"
+    rows, meta = score_run({**entry, "data": data}, cases, truth)
+    assert meta["stale_items"] == 1 and meta["errored_items"] == 1

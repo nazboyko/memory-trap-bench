@@ -21,12 +21,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-import kaggle_benchmarks as kbench
-from kaggle_benchmarks.actors.llms import LLMChat, LLMResponse
+os.environ.setdefault("BENCHMARK_CONSOLE_QUIET", "True")
 
-from memtrap.build_tasks import OUT_DIR, TASKS
+import kaggle_benchmarks as kbench  # noqa: E402
+from kaggle_benchmarks.actors.llms import LLMChat, LLMResponse  # noqa: E402
+
+from memtrap.build_tasks import OUT_DIR, TASKS  # noqa: E402
 
 STUBS = ("correct", "folklore", "garbage")
+REPAIR_PREFIX = "Your reply could not be read."
 
 
 class StubLLM(LLMChat):
@@ -63,8 +66,27 @@ class StubLLM(LLMChat):
         return "```json\n" + json.dumps(reply) + "\n```"
 
     def invoke(self, messages, system=None, reasoning=None, tools=None, **kwargs):
-        last = str(messages[-1].content) if messages else ""
+        texts = [str(m.content) for m in messages]
+        last = texts[-1] if texts else ""
+        if self.mode == "repair":
+            # Garbage first, a correct JSON reply after the repair message.
+            if last.startswith(REPAIR_PREFIX):
+                item = next((self.by_prompt[t] for t in reversed(texts) if t in self.by_prompt), None)
+                return LLMResponse(content=self.correct_reply(item), meta={"input_tokens": 0})
+            return LLMResponse(content="Let me think about the allocator first.", meta={"input_tokens": 0})
+        if self.mode == "draft":
+            # A draft object, then the final one in the same reply.
+            item = self.by_prompt.get(last)
+            draft = json.dumps({"answer": "A", "estimate": 1, "mechanism": "A", "confidence": 1})
+            return LLMResponse(content=f"Draft: {draft}\nFinal:\n{self.correct_reply(item)}", meta={"input_tokens": 0})
         return LLMResponse(content=self.reply_for(self.by_prompt.get(last)), meta={"input_tokens": 0})
+
+    def correct_reply(self, item: dict | None) -> str:
+        mode, self.mode = self.mode, "correct"
+        try:
+            return self.reply_for(item)
+        finally:
+            self.mode = mode
 
 
 def load_task(path: Path, function: str) -> dict:
@@ -117,7 +139,6 @@ def check(mode: str, s: dict) -> list[str]:
 
 def main(argv: list[str]) -> int:
     problems: list[str] = []
-    os.environ.setdefault("BENCHMARK_CONSOLE_QUIET", "1")
     with tempfile.TemporaryDirectory() as tmp, in_directory(tmp):
         for condition, spec in TASKS.items():
             path = OUT_DIR / spec["file"]

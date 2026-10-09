@@ -26,10 +26,24 @@ model_flags() {
     for m in $1; do printf -- '-m %s ' "$m"; done
 }
 
+# One unknown slug makes the CLI refuse the whole batch, so drop absent
+# models first and say which.
+available_models() {
+    list=$(kaggle b t models)
+    for m in $1; do
+        if printf '%s\n' "$list" | awk '{print $1}' | grep -qx "$m"; then
+            printf '%s ' "$m"
+        else
+            echo "skipping $m: not in kaggle b t models" >&2
+        fi
+    done
+}
+
 pilot() {
     kaggle b t push memorytrap-pilot-a -f kaggle/memtrap_pilot.py --wait "$WAIT"
     # shellcheck disable=SC2046
-    kaggle b t run memorytrap-pilot-a $(model_flags "$PILOT_MODELS") --wait "$WAIT" || echo "pilot run reported a failure; see kaggle b t status memorytrap-pilot-a"
+    kaggle b t run memorytrap-pilot-a $(model_flags "$(available_models "$PILOT_MODELS")") --wait "$WAIT"
+    kaggle b t status memorytrap-pilot-a
     kaggle b t download memorytrap-pilot-a -o results/kaggle/pilot -f
 }
 
@@ -41,17 +55,19 @@ push() {
 }
 
 run() {
+    models=$(available_models "$MODELS")
     for pair in $TASKS; do
         slug=${pair#*:}
         # shellcheck disable=SC2046
-        kaggle b t run "$slug" $(model_flags "$MODELS") --wait "$WAIT" || echo "$slug: some models failed; see kaggle b t status $slug"
+        kaggle b t run "$slug" $(model_flags "$models") --wait "$WAIT" || echo "$slug: the run reported a failure"
+        kaggle b t status "$slug" || true
     done
 }
 
 download() {
     for pair in $TASKS; do
         cond=${pair%%:*}; slug=${pair#*:}
-        kaggle b t download "$slug" -o "results/kaggle/$cond" -f
+        kaggle b t download "$slug" -o "results/kaggle/$cond" -f || echo "$slug: download failed; rerun sh kaggle/run.sh download"
         kaggle b t status "$slug" > "results/kaggle/$cond/status.txt" 2>&1 || true
     done
 }

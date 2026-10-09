@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import statistics
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 from memtrap.build_tasks import TASKS, build_items
@@ -57,14 +57,26 @@ def task_score(data: dict) -> float:
     return 0.0
 
 
-def assistant_texts(run: dict) -> list[str]:
+def role_texts(run: dict, role: str) -> list[str]:
     texts = []
     for conv in run.get("conversations", []):
         for req in conv.get("requests", []):
             for content in req.get("contents", []):
-                if content.get("role") == "CONTENT_ROLE_ASSISTANT":
+                if content.get("role") == role:
                     texts.append("".join(p.get("text", "") for p in content.get("parts", [])))
     return texts
+
+
+def assistant_texts(run: dict) -> list[str]:
+    return role_texts(run, "CONTENT_ROLE_ASSISTANT")
+
+
+def end_time(data: dict) -> datetime:
+    raw = data.get("endTime", "")
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def dict_result(run: dict) -> dict | None:
@@ -85,7 +97,7 @@ def load_runs(runs_root: Path) -> tuple[dict, list[dict]]:
         if cond is None:
             continue
         model = data.get("modelVersion", {}).get("slug", "unknown")
-        entry = {"path": path, "data": data, "condition": cond, "model": model, "end": data.get("endTime", "")}
+        entry = {"path": path, "data": data, "condition": cond, "model": model, "end": end_time(data)}
         seen.append(entry)
         key = (cond, model)
         if key not in newest or entry["end"] > newest[key]["end"]:
@@ -100,14 +112,19 @@ def score_run(entry: dict, cases: list[dict], truth: dict) -> tuple[list[dict], 
     index = by_id(cases)
     rows = []
     mismatches = 0
+    stale = 0
     found = set()
     for sub in entry["data"].get("subruns", []):
         stored = dict_result(sub)
         if not stored or stored.get("item") not in items:
             continue
         item_id = stored["item"]
-        found.add(item_id)
         item = items[item_id]
+        users = role_texts(sub, "CONTENT_ROLE_USER")
+        if not users or users[0] != item["prompt"]:
+            stale += 1  # the run asked an older prompt; it cannot be scored against today's truth
+            continue
+        found.add(item_id)
         texts = assistant_texts(sub)
         parsed = parse_response(texts[0], unit=item["unit"]) if texts else None
         if parsed is None and len(texts) > 1:
@@ -123,13 +140,15 @@ def score_run(entry: dict, cases: list[dict], truth: dict) -> tuple[list[dict], 
         item = items[item_id]
         case = index[item["case_id"]]
         row = score_response(case, truth[case["id"]], cond, item["version"], None)
-        row.update(item=item_id, model=entry["model"], errored=True, reasoning=None, raw="")
+        # No reply at all: scored 0 like the Kaggle task does, but not a parse failure.
+        row.update(item=item_id, model=entry["model"], errored=True, parse_failure=False, reasoning=None, raw="")
         rows.append(row)
     meta = {
         "file": entry["path"],
         "stored_score": task_score(entry["data"]),
         "state": entry["data"].get("state", ""),
         "errored_items": len(set(items) - found),
+        "stale_items": stale,
         "mismatches": mismatches,
     }
     return rows, meta
@@ -163,6 +182,7 @@ def leaderboard(rows_by: dict, models: list[str]) -> list[dict]:
                 line[cond] = None
         line["mean"] = sum(scores) / len(scores) if scores else None
         line["parse_failures"] = pf
+        line["errored"] = sum(r["errored"] for cond in CONDITIONS for r in rows_by.get((cond, m), []))
         out.append(line)
     out.sort(key=lambda r: (-(r["mean"] or 0), r["model"]))
     return out
@@ -177,7 +197,7 @@ def version_sensitivity(rows_by: dict, models: list[str], cases: list[dict], tru
         for m in models:
             rows = {r["item"]: r for r in rows_by.get(("versioned", m), [])}
             a, b = rows.get(f"{case['id']}@{old}"), rows.get(f"{case['id']}@{new}")
-            if not a or not b:
+            if not a or not b or a["errored"] or b["errored"]:
                 continue
             both = a["answer_ok"] and b["answer_ok"]
             changed = a["answer"] != b["answer"]
@@ -193,13 +213,17 @@ def version_sensitivity(rows_by: dict, models: list[str], cases: list[dict], tru
 def evidence_update(rows_by: dict, models: list[str], cases: list[dict]) -> list[dict]:
     out = []
     for m in models:
-        cold = {r["case"]: r for r in rows_by.get(("cold", m), [])}
+        cold = {r["case"]: r for r in rows_by.get(("cold", m), []) if not r["errored"]}
         ver = defaultdict(list)
         evi = defaultdict(list)
         for r in rows_by.get(("versioned", m), []):
             ver[r["case"]].append(r)
         for r in rows_by.get(("evidence", m), []):
             evi[r["case"]].append(r)
+        errored_cases = {r["case"] for rows in (ver.values(), evi.values()) for rs in rows for r in rs if r["errored"]}
+        for cid in errored_cases:
+            ver.pop(cid, None)
+            evi.pop(cid, None)
         if not cold or not evi:
             continue
         gained = lost = 0
@@ -249,7 +273,7 @@ def chart_split_cases(cases: list[dict], truth: dict, out: Path) -> Path:
     split = [c for c in active_cases(cases)
              if truth[c["id"]]["version_split"] and list(c["decision"]["quantities"]) == ["r"]]
     fig = _figure(plt, 10, 3.8)
-    axes = fig.subplots(1, len(split))
+    axes = fig.subplots(1, len(split), squeeze=False)[0]
     labels = {
         "P1": "P1  reverse-built array / range()",
         "P4": "P4  SplFixedArray / plain list",
@@ -425,6 +449,24 @@ def table(header: list[str], rows: list[list]) -> str:
     return "\n".join(lines)
 
 
+def measurement_summary(cases: list[dict], truth: dict) -> str:
+    """One paragraph on how the truth was measured, read from truth.json."""
+    entries = [e for c in active_cases(cases) for v, e in truth[c["id"]]["versions"].items()]
+    readings = sorted({e["readings"] for e in entries})
+    sources = sorted({e["source"] for e in entries})
+    platforms = sorted({p for e in entries for p in e["platform"]})
+    metrics = sorted({m for e in entries for m in e["metrics"].values()})
+    versions = sorted({v for c in active_cases(cases) for v in truth[c["id"]]["versions"]})
+    return (
+        f"Readings per version: {', '.join(map(str, readings))} (median used). Source: {', '.join(sources)} "
+        f"(gha = GitHub Actions). Platforms: {'; '.join(platforms)}. Versions measured: "
+        f"{', '.join(version_label(v) for v in versions)}. Metrics: {', '.join(metrics)}, as deltas around "
+        "the measured structure; Go readings follow `runtime.GC()`, PHP readings follow `gc_collect_cycles()`. "
+        "Full values per version are in `cases/truth.json`. The decision quantities are the ratios each "
+        "case's rules in `cases/cases.json` use (for example r = b / a)."
+    )
+
+
 def truth_section(cases: list[dict], truth: dict) -> str:
     rows = []
     for case in active_cases(cases):
@@ -476,11 +518,7 @@ def build_report(cases, truth, newest, seen, runs_root: Path, out_dir: Path, ban
         "",
         "## 1. What the harness measured",
         "",
-        "Three readings per runtime version on GitHub Actions (linux/amd64), median. PHP readings are "
-        "`memory_get_usage()` deltas with opcache off; Go readings are `runtime.MemStats` deltas after "
-        "`runtime.GC()` (HeapInuse for maps, StackInuse for goroutines, TotalAlloc for G4). Full values per "
-        "version are in `cases/truth.json`. The decision quantities are the ratios each case's rules in "
-        "`cases/cases.json` use (for example r = b / a).",
+        measurement_summary(cases, truth),
         "",
         truth_section(cases, truth),
         "",
@@ -518,19 +556,21 @@ def build_report(cases, truth, newest, seen, runs_root: Path, out_dir: Path, ban
     parts += ["## 2. Leaderboard", "",
               "Task score = mean over items of (answer + estimate + mechanism) / 3. The mean column averages the conditions a model completed.",
               "",
-              table(["model", "cold", "versioned", "evidence", "mean", "parse failures"],
+              table(["model", "cold", "versioned", "evidence", "mean", "parse failures", "no reply"],
                     [[f"`{r['model']}`", fmt(r["cold"]), fmt(r["versioned"]), fmt(r["evidence"]), fmt(r["mean"]),
-                      r["parse_failures"]] for r in board]),
+                      r["parse_failures"], r["errored"]] for r in board]),
               "", f"![leaderboard]({rel(chart_leaderboard(board, charts))})", ""]
     mism = sum(m["mismatches"] for m in metas.values())
     errored = sum(m["errored_items"] for m in metas.values())
+    stale = sum(m["stale_items"] for m in metas.values())
     stored_diff = [
         f"`{model}` {cond}: stored {fmt(meta['stored_score'], 3)}, rescored {fmt(summarize(rows_by[(cond, model)])['score'], 3)}"
         for (cond, model), meta in sorted(metas.items())
         if abs(meta["stored_score"] - summarize(rows_by[(cond, model)])["score"]) > 1e-6
     ]
     parts += [f"Run files used: {len(newest)} (newest per model and condition) of {len(seen)} found. "
-              f"Items with no result in their run file (errored, scored 0): {errored}. "
+              f"Items with no result in their run file (no reply, scored 0): {errored}. "
+              f"Items whose prompt differs from the current task (stale, scored 0): {stale}. "
               f"Items whose stored score differs from the rescore: {mism}.", ""]
     if stored_diff:
         parts += ["Task scores that differ from the stored Kaggle score: " + "; ".join(stored_diff) + ".", ""]
@@ -592,7 +632,7 @@ def build_report(cases, truth, newest, seen, runs_root: Path, out_dir: Path, ban
         if c["control"]:
             folk.append([c["id"], "control", "n/a", "n/a"])
             continue
-        rs = [r for rows in rows_all.values() for r in rows if r["case"] == c["id"]]
+        rs = [r for rows in rows_all.values() for r in rows if r["case"] == c["id"] and not r["errored"]]
         folk.append([c["id"], len(rs), sum(r["folklore_mechanism"] for r in rs), sum(r["folklore_answer"] for r in rs)])
     parts += ["## 8. Folklore index", "",
               "How often each case's folklore mechanism and folklore answer were chosen, all models and conditions. "
@@ -619,7 +659,8 @@ def build_report(cases, truth, newest, seen, runs_root: Path, out_dir: Path, ban
 
     parts += ["## 12. Limits", "",
               f"- {len(active_cases(cases))} cases, {len(order)} models, one run per model and condition unless stated.",
-              "- The Kaggle model proxy ignores the temperature setting, so replies are not guaranteed to be deterministic.",
+              "- kaggle-benchmarks 0.6.1 does not send a temperature through the Kaggle model proxy "
+              "(`kaggle_benchmarks/kaggle/model_proxy.py` sets `support_temperature` to False), so a rerun can differ.",
               "- Replies that cannot be parsed after one repair turn score zero and are counted as parse failures.",
               "- Measurements are from GitHub Actions runners (linux/amd64, PHP NTS CLI with opcache off); other builds and allocators can differ.",
               ""]

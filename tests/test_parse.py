@@ -80,3 +80,19 @@ def test_number_units(value, unit, expected):
 ])
 def test_confidence_range(value, expected):
     assert confidence(value) == expected
+
+
+def test_last_json_object_wins():
+    text = 'Draft {"answer": "A", "mechanism": "A"} then final {"answer": "C", "estimate": 2, "mechanism": "B", "confidence": 60}'
+    assert parse_response(text)["answer"] == "C"
+
+
+def test_exponents_and_non_finite_numbers():
+    assert number("1.5e7 bytes", "MB") == 1.5e7 / (1 << 20)
+    assert number("9" * 400, "MB") is None
+    assert number(float("inf"), "MB") is None
+
+
+def test_confidence_fraction_is_unusable():
+    assert confidence(0.9) is None
+    assert confidence(0) == 0 and confidence(1) == 1

@@ -9,6 +9,7 @@ neither answer, mechanism nor estimate can be read is a parse failure (None).
 from __future__ import annotations
 
 import json
+import math
 import re
 
 LETTERS = ("A", "B", "C", "D")
@@ -21,7 +22,7 @@ _UNIT_BYTES = {
     "mb": 1 << 20, "mib": 1 << 20, "m": 1 << 20,
     "gb": 1 << 30, "gib": 1 << 30, "g": 1 << 30,
 }
-_NUMBER_UNIT = re.compile(r"(-?\d[\d,_]*(?:\.\d+)?|-?\.\d+)\s*([a-zA-Z]+)?")
+_NUMBER_UNIT = re.compile(r"(-?\d[\d,_]*(?:\.\d+)?(?:[eE][-+]?\d+)?|-?\.\d+)\s*([a-zA-Z]+)?")
 
 
 def _json_objects(text: str):
@@ -53,14 +54,17 @@ def _json_objects(text: str):
 
 
 def _from_json(text: str) -> dict | None:
+    """The last answer-shaped JSON object: a reply that drafts and then
+    corrects itself is scored on its final object."""
+    found = None
     for chunk in _json_objects(text):
         try:
             obj = json.loads(chunk)
         except json.JSONDecodeError:
             continue
         if isinstance(obj, dict) and any(k in obj for k in ("answer", "mechanism", "estimate")):
-            return obj
-    return None
+            found = obj
+    return found
 
 
 _PAIR = re.compile(
@@ -92,7 +96,7 @@ def number(value, unit: str = "MB") -> float | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value) if value == value and abs(value) != float("inf") else None
+        return float(value) if math.isfinite(value) else None
     s = str(value).strip().lstrip("~≈").strip()
     m = _NUMBER_UNIT.search(s)
     if not m:
@@ -100,8 +104,8 @@ def number(value, unit: str = "MB") -> float | None:
     num = float(m.group(1).replace(",", "").replace("_", ""))
     suffix = (m.group(2) or "").lower()
     if suffix in _UNIT_BYTES:
-        return num * _UNIT_BYTES[suffix] / _UNIT_BYTES[unit.lower()]
-    return num
+        num = num * _UNIT_BYTES[suffix] / _UNIT_BYTES[unit.lower()]
+    return num if math.isfinite(num) else None
 
 
 def confidence(value) -> int | None:
@@ -112,8 +116,10 @@ def confidence(value) -> int | None:
         if not m:
             return None
         value = float(m.group(0))
-    if not isinstance(value, (int, float)):
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
         return None
+    if 0 < value < 1 and value != int(value):
+        return None  # a fraction such as 0.9 is not on the 0-100 scale asked for
     if 0 <= value <= 100:
         return int(round(value))
     return None

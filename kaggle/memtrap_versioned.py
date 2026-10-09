@@ -10,6 +10,7 @@
 # %%
 import json
 import re
+import time
 
 import kaggle_benchmarks as kbench
 import pandas as pd
@@ -17,6 +18,7 @@ import pandas as pd
 CONDITION = 'versioned'
 ITEM_LIMIT = None  # None runs every item; the pilot uses a small number
 REPAIR_MESSAGE = "Your reply could not be read. Reply with the JSON object only, nothing else."
+ATTEMPTS = 3  # a nested evaluate() runs each item once, so transient proxy errors are retried here
 
 ITEMS = {'P1@php-8.1': {'case_id': 'P1',
                 'condition': 'versioned',
@@ -1380,6 +1382,7 @@ if ITEM_LIMIT:
 # %%
 # Reply parser, inlined from memtrap/parse.py.
 import json
+import math
 import re
 
 LETTERS = ("A", "B", "C", "D")
@@ -1392,7 +1395,7 @@ _UNIT_BYTES = {
     "mb": 1 << 20, "mib": 1 << 20, "m": 1 << 20,
     "gb": 1 << 30, "gib": 1 << 30, "g": 1 << 30,
 }
-_NUMBER_UNIT = re.compile(r"(-?\d[\d,_]*(?:\.\d+)?|-?\.\d+)\s*([a-zA-Z]+)?")
+_NUMBER_UNIT = re.compile(r"(-?\d[\d,_]*(?:\.\d+)?(?:[eE][-+]?\d+)?|-?\.\d+)\s*([a-zA-Z]+)?")
 
 
 def _json_objects(text: str):
@@ -1424,14 +1427,17 @@ def _json_objects(text: str):
 
 
 def _from_json(text: str) -> dict | None:
+    """The last answer-shaped JSON object: a reply that drafts and then
+    corrects itself is scored on its final object."""
+    found = None
     for chunk in _json_objects(text):
         try:
             obj = json.loads(chunk)
         except json.JSONDecodeError:
             continue
         if isinstance(obj, dict) and any(k in obj for k in ("answer", "mechanism", "estimate")):
-            return obj
-    return None
+            found = obj
+    return found
 
 
 _PAIR = re.compile(
@@ -1463,7 +1469,7 @@ def number(value, unit: str = "MB") -> float | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value) if value == value and abs(value) != float("inf") else None
+        return float(value) if math.isfinite(value) else None
     s = str(value).strip().lstrip("~≈").strip()
     m = _NUMBER_UNIT.search(s)
     if not m:
@@ -1471,8 +1477,8 @@ def number(value, unit: str = "MB") -> float | None:
     num = float(m.group(1).replace(",", "").replace("_", ""))
     suffix = (m.group(2) or "").lower()
     if suffix in _UNIT_BYTES:
-        return num * _UNIT_BYTES[suffix] / _UNIT_BYTES[unit.lower()]
-    return num
+        num = num * _UNIT_BYTES[suffix] / _UNIT_BYTES[unit.lower()]
+    return num if math.isfinite(num) else None
 
 
 def confidence(value) -> int | None:
@@ -1483,8 +1489,10 @@ def confidence(value) -> int | None:
         if not m:
             return None
         value = float(m.group(0))
-    if not isinstance(value, (int, float)):
+    if not isinstance(value, (int, float)) or not math.isfinite(value):
         return None
+    if 0 < value < 1 and value != int(value):
+        return None  # a fraction such as 0.9 is not on the 0-100 scale asked for
     if 0 <= value <= 100:
         return int(round(value))
     return None
@@ -1584,7 +1592,9 @@ def score_response(case: dict, truth_case: dict, condition: str, version: str | 
     out["folklore_answer"] = int(
         not case["control"] and out["answer_ok"] == 0 and r.get("answer") == case["folklore_answer"]
     )
-    out["right_answer_wrong_mechanism"] = int(out["answer_ok"] == 1 and out["mechanism_ok"] == 0 and response is not None)
+    out["right_answer_wrong_mechanism"] = int(
+        out["answer_ok"] == 1 and out["mechanism_ok"] == 0 and r.get("mechanism") is not None
+    )
     conf = r.get("confidence")
     out["confidently_wrong"] = int(
         response is not None and out["answer_ok"] == 0 and isinstance(conf, (int, float)) and conf >= CONFIDENTLY_WRONG
@@ -1614,16 +1624,30 @@ def summarize(rows: list[dict]) -> dict:
 
 
 # %%
+def ask(llm, message: str) -> str:
+    """Send one user message; on an error, ask again for a reply to the same
+    history instead of repeating the message."""
+    for attempt in range(ATTEMPTS):
+        try:
+            if attempt == 0:
+                return llm.prompt(message)
+            return llm.respond().content
+        except Exception:
+            if attempt == ATTEMPTS - 1:
+                raise
+            time.sleep(10 * (attempt + 1))
+
+
 @kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)
 def memtrap_item(llm, item_id: str) -> dict:
     """One case under one condition and runtime version."""
     item = ITEMS[item_id]
-    reply = llm.prompt(item["prompt"])
+    reply = ask(llm, item["prompt"])
     parsed = parse_response(reply, unit=item["unit"])
     retried = False
     if parsed is None:
         retried = True
-        reply = llm.prompt(REPAIR_MESSAGE)
+        reply = ask(llm, REPAIR_MESSAGE)
         parsed = parse_response(reply, unit=item["unit"])
     row = score_response(item["case"], item["truth"], item["condition"], item["version"], parsed)
     row["item"] = item_id

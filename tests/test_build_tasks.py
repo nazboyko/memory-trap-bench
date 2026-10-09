@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from memtrap.build_tasks import TASKS, BuildError, build_items, module_source, render_task
+from memtrap.build_tasks import OUT_DIR, TASKS, BuildError, build_items, module_source, render_task
 from memtrap.catalog import ROOT, by_id, load_truth
 from tests.conftest import N_CASES
 
@@ -77,3 +77,24 @@ def test_stub_models_score_as_expected(tmp_path, monkeypatch):
     namespace = load_task(OUT_DIR / spec["file"], spec["function"])
     for mode in ("correct", "folklore", "garbage"):
         assert check(mode, run_stub(namespace, spec["function"], mode)) == []
+
+
+def test_committed_task_files_are_current(cases, truth):
+    from memtrap.build_tasks import PILOT
+
+    for cond, spec in TASKS.items():
+        expected = render_task(spec, cond, build_items(cases, truth, cond))
+        assert (OUT_DIR / spec["file"]).read_text() == expected, f"rebuild {spec['file']}"
+    pilot = render_task(PILOT, "cold", build_items(cases, truth, "cold"), 3)
+    assert (OUT_DIR / PILOT["file"]).read_text() == pilot
+
+
+def test_repair_turn_and_final_json_are_scored(tmp_path, monkeypatch):
+    from memtrap.stub_run import load_task, run_stub
+
+    monkeypatch.chdir(tmp_path)
+    spec = TASKS["cold"]
+    namespace = load_task(OUT_DIR / spec["file"], spec["function"])
+    for mode in ("repair", "draft"):
+        s = run_stub(namespace, spec["function"], mode)
+        assert s["task_score"] == 1.0 and s["parse_failures"] == 0, mode

@@ -65,7 +65,9 @@ def score_response(case: dict, truth_case: dict, condition: str, version: str | 
     out["folklore_answer"] = int(
         not case["control"] and out["answer_ok"] == 0 and r.get("answer") == case["folklore_answer"]
     )
-    out["right_answer_wrong_mechanism"] = int(out["answer_ok"] == 1 and out["mechanism_ok"] == 0 and response is not None)
+    out["right_answer_wrong_mechanism"] = int(
+        out["answer_ok"] == 1 and out["mechanism_ok"] == 0 and r.get("mechanism") is not None
+    )
     conf = r.get("confidence")
     out["confidently_wrong"] = int(
         response is not None and out["answer_ok"] == 0 and isinstance(conf, (int, float)) and conf >= CONFIDENTLY_WRONG

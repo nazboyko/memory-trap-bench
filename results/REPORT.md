@@ -26,6 +26,8 @@ Three readings per runtime version on GitHub Actions (linux/amd64), median. PHP 
 
 ![measured ratios by version](charts/split_cases.png)
 
+Prompts per task: cold 15, versioned 18, evidence 18. Cases whose answer differs between the two versions asked are asked once per version in the versioned and evidence tasks.
+
 ## 2. Model results
 
 Pending: there are no Kaggle run files under `results/kaggle/` yet. Run `sh kaggle/run.sh all`, then `uv run python -m memtrap.analyze`.

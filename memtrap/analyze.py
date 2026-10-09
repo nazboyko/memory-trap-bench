@@ -485,6 +485,10 @@ def build_report(cases, truth, newest, seen, runs_root: Path, out_dir: Path, ban
         "",
         f"![measured ratios by version]({rel(chart_split_cases(cases, truth, charts))})",
         "",
+        "Prompts per task: " + ", ".join(f"{cond} {len(build_items(cases, truth, cond))}" for cond in CONDITIONS)
+        + ". Cases whose answer differs between the two versions asked are asked once per version in the "
+        "versioned and evidence tasks.",
+        "",
     ]
 
     rows_by: dict = {}

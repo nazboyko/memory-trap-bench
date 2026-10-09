@@ -22,3 +22,10 @@ def write_catalog(tmp_path):
         return cpath, tpath
 
     return write
+
+
+def letter_of(case, text_start):
+    """The option letter whose text starts with text_start."""
+    hits = [k for k, v in case["options"].items() if v.startswith(text_start)]
+    assert len(hits) == 1, (case["id"], text_start, hits)
+    return hits[0]

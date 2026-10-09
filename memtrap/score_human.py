@@ -32,6 +32,9 @@ def normalize(entry) -> dict | None:
 
 def score_answers(answers: dict, cases: list[dict], truth: dict) -> tuple[list[dict], dict]:
     rows = []
+    known = {c["id"] for c in active_cases(cases)}
+    for cid in sorted(set(answers) - known):
+        print(f"warning: answers.json has an unknown case id {cid!r}; it is ignored", file=sys.stderr)
     for case in active_cases(cases):
         if case["id"] not in truth:
             raise SystemExit(f"no measured truth for {case['id']} yet; score after Phase 2")

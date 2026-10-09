@@ -77,8 +77,16 @@ def namespace(values: dict[str, float], n: int) -> dict[str, float]:
 
 
 def quantities(case: dict, values: dict[str, float], n: int) -> dict[str, float]:
+    """Evaluate the decision quantities; a division by zero gives NaN, which
+    no rule interval contains."""
     ns = namespace(values, n)
-    return {k: eval_expr(e, ns) for k, e in case["decision"]["quantities"].items()}
+    out = {}
+    for k, e in case["decision"]["quantities"].items():
+        try:
+            out[k] = eval_expr(e, ns)
+        except ZeroDivisionError:
+            out[k] = float("nan")
+    return out
 
 
 def decide(case: dict, values: dict[str, float], n: int) -> str | None:
@@ -104,7 +112,11 @@ def evidence_placeholders(text: str) -> list[str]:
 
 
 def render_evidence(text: str, values: dict[str, float], n: int) -> str:
-    """Fill {variant_MB}, {variant_KB} and {variant_KB_each} placeholders."""
+    """Fill {variant_MB}, {variant_KB} and {variant_KB_each} placeholders.
+
+    values and n are the measured values and count of the evidence's source
+    case, at the version the prompt names, not those of the target case.
+    """
     filled = {}
     for field in evidence_placeholders(text):
         if field.endswith("_KB_each"):

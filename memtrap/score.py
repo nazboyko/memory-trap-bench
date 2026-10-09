@@ -61,7 +61,10 @@ def score_response(case: dict, truth_case: dict, condition: str, version: str | 
     out["case_score"] = (out["answer_ok"] + out["estimate_ok"] + out["mechanism_ok"]) / 3
     # A control's folklore is the correct mechanism, so it is never counted as folklore.
     out["folklore_mechanism"] = int(not case["control"] and r.get("mechanism") == case["folklore_mechanism"])
-    out["folklore_answer"] = int(not case["control"] and r.get("answer") == case["folklore_answer"])
+    # A stale rule can be right on an older version; it only counts when wrong.
+    out["folklore_answer"] = int(
+        not case["control"] and out["answer_ok"] == 0 and r.get("answer") == case["folklore_answer"]
+    )
     out["right_answer_wrong_mechanism"] = int(out["answer_ok"] == 1 and out["mechanism_ok"] == 0 and response is not None)
     conf = r.get("confidence")
     out["confidently_wrong"] = int(
@@ -72,13 +75,12 @@ def score_response(case: dict, truth_case: dict, condition: str, version: str | 
 
 def summarize(rows: list[dict]) -> dict:
     """Task score and derived counts over scored rows."""
-    if not rows:
-        return {"score": 0.0, "cases": 0}
     right = [r["confidence"] for r in rows if r["answer_ok"] and isinstance(r["confidence"], (int, float))]
     wrong = [r["confidence"] for r in rows if not r["answer_ok"] and isinstance(r["confidence"], (int, float))]
     return {
-        "score": sum(r["case_score"] for r in rows) / len(rows),
+        "score": sum(r["case_score"] for r in rows) / len(rows) if rows else 0.0,
         "cases": len(rows),
+        "non_control_cases": sum(not r["control"] for r in rows),
         "answer_ok": sum(r["answer_ok"] for r in rows),
         "estimate_ok": sum(r["estimate_ok"] for r in rows),
         "mechanism_ok": sum(r["mechanism_ok"] for r in rows),

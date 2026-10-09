@@ -13,15 +13,16 @@ from memtrap.catalog import version_label
 CONDITIONS = ("cold", "versioned", "evidence")
 
 RUNTIME_LINES = {
-    "php": "Runtime: {label}.x, CLI, NTS, opcache disabled, memory measured with memory_get_usage() (1 MB = 1,048,576 bytes).",
-    "go": "Runtime: {label}.x, linux/amd64, memory read from runtime.MemStats (1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes).",
+    "php": "Runtime: {label}.x, CLI, NTS, opcache disabled.",
+    "go": "Runtime: {label}.x, linux/amd64.",
 }
+UNITS_LINE = "Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes."
 
 LANGUAGE = {"php": "php", "go": "go"}
 
 JSON_INSTRUCTION = (
     "Reply with one JSON object and nothing else, in this shape:\n"
-    '{{"answer": "A", "estimate": 0.0, "mechanism": "A", "confidence": 50, "reasoning": "..."}}\n'
+    '{{"answer": "<letter>", "estimate": <number>, "mechanism": "<letter>", "confidence": <integer>, "reasoning": "<text>"}}\n'
     "answer: the letter of the answer option. estimate: a number in {unit}. "
     "mechanism: the letter of the explanation. confidence: an integer from 0 to 100 "
     "for how sure you are about the answer. reasoning: at most 60 words."
@@ -50,7 +51,7 @@ def case_body(case: dict, version: str | None = None, evidence: str | None = Non
     parts.append(f"Question: {case['question']}")
     parts.append("Answer options:\n" + options_block(case["options"]))
     parts.append("Which explanation best describes the cause?\n" + options_block(case["mechanisms"]))
-    parts.append(f"Estimate: {case['estimate']['what']}.")
+    parts.append(f"Estimate: {case['estimate']['what']}. {UNITS_LINE}")
     return "\n\n".join(parts)
 
 

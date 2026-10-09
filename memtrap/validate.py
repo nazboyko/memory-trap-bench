@@ -15,6 +15,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import re
+
 from memtrap.catalog import (
     CASES_PATH,
     LETTERS,
@@ -22,11 +24,13 @@ from memtrap.catalog import (
     UNITS,
     active_cases,
     by_id,
+    eval_expr,
     evidence_placeholders,
     expr_names,
     load_cases,
     load_truth,
     placeholder_variant,
+    render_evidence,
 )
 
 REQUIRED = {
@@ -40,6 +44,7 @@ REQUIRED = {
 FAMILIES = {"php": {"arrays"}, "go": {"maps", "stacks"}}
 STATUSES = {"draft", "measured", "reserve"}
 BANNED_WORDS = ("trap", "surprising", "actually", "contrary to")
+RESERVED_NAMES = {"n", *UNITS}
 GO_MAIN_MARKER = "// in main"
 
 
@@ -84,9 +89,12 @@ def check_case(case: dict, all_cases: dict[str, dict]) -> list[str]:
         if case["correct_mechanism"] == case["folklore_mechanism"]:
             err("the folklore mechanism must differ from the correct one")
         lengths = {k: len(v) for k, v in case["mechanisms"].items()}
-        longest = max(lengths.values())
-        if lengths[case["correct_mechanism"]] == longest:
+        mine = lengths[case["correct_mechanism"]]
+        others = [n for k, n in lengths.items() if k != case["correct_mechanism"]]
+        if mine >= max(others):
             err("the correct mechanism is the longest text; it gives the answer away")
+        if mine < min(others):
+            err("the correct mechanism is the shortest text; it gives the answer away")
 
     vo = case["version_option"]
     if vo is not None:
@@ -96,17 +104,22 @@ def check_case(case: dict, all_cases: dict[str, dict]) -> list[str]:
             err("the version option must say that the answer depends on the version")
         if len(case["versions"]) < 2:
             err("a case with a version option needs at least two versions")
+        if case["folklore_answer"] == vo:
+            err("the folklore answer cannot be the version option")
     else:
         for k, v in case["options"].items():
             if "depends on the" in v.lower():
                 err(f"option {k} talks about a version split but version_option is null")
 
-    text = " ".join([case["question"], *case["options"].values()]).lower()
+    text = " ".join([case["question"], *case["options"].values(), *case["mechanisms"].values()]).lower()
     for word in BANNED_WORDS:
-        if word in text:
-            err(f"question or options use the word {word!r}")
+        if re.search(rf"\b{re.escape(word)}\b", text):
+            err(f"question, options or mechanisms use the word {word!r}")
 
     variants = set(case["variants"])
+    if variants & RESERVED_NAMES:
+        err(f"variant names {sorted(variants & RESERVED_NAMES)} are reserved")
+    dummy = {name: 1.0 for name in variants | RESERVED_NAMES}
     allowed = variants | {"n", *UNITS}
     dec = case["decision"]
     qnames = set(dec.get("quantities", {}))
@@ -120,6 +133,11 @@ def check_case(case: dict, all_cases: dict[str, dict]) -> list[str]:
             continue
         if unknown:
             err(f"quantity {qn} uses unknown names {sorted(unknown)}")
+            continue
+        try:
+            eval_expr(expr, dummy)
+        except (ValueError, KeyError) as exc:
+            err(f"quantity {qn}: {exc}")
     rule_options = []
     for rule in dec.get("rules", []):
         opt = rule.get("option")
@@ -138,6 +156,11 @@ def check_case(case: dict, all_cases: dict[str, dict]) -> list[str]:
                 err(f"rule for {opt} has a bad interval for {qn}")
     if len(set(rule_options)) != len(rule_options):
         err("two rules decide the same option")
+    rules = dec.get("rules", [])
+    for i, r1 in enumerate(rules):
+        for r2 in rules[i + 1 :]:
+            if rules_overlap(r1.get("when", {}), r2.get("when", {})):
+                err(f"rules for {r1.get('option')} and {r2.get('option')} overlap")
     if case["folklore_answer"] != vo and case["folklore_answer"] not in rule_options:
         err("the folklore answer has no measurement rule")
 
@@ -148,8 +171,12 @@ def check_case(case: dict, all_cases: dict[str, dict]) -> list[str]:
         unknown = expr_names(est.get("expr", "")) - allowed
         if unknown:
             err(f"estimate uses unknown names {sorted(unknown)}")
+        else:
+            eval_expr(est.get("expr", ""), dummy)
     except SyntaxError:
         err("estimate expression does not parse")
+    except (ValueError, KeyError) as exc:
+        err(f"estimate: {exc}")
     tol = est.get("tolerance")
     if not (isinstance(tol, list) and len(tol) == 2 and 0 < tol[0] < 1 < tol[1]):
         err("estimate tolerance must be [lo, hi] with lo < 1 < hi")
@@ -177,13 +204,29 @@ def check_case(case: dict, all_cases: dict[str, dict]) -> list[str]:
                 continue
             if variant not in src["variants"]:
                 err(f"evidence placeholder {field} names no variant of {src['id']}")
+        try:
+            render_evidence(ev.get("text", ""), {k: 1.0 for k in src["variants"]}, 1)
+        except (KeyError, ValueError, IndexError) as exc:
+            err(f"evidence text does not render: {exc!r}")
     if not ev.get("text"):
         err("evidence text is empty")
     return errs
 
 
+def rules_overlap(w1: dict, w2: dict) -> bool:
+    """Two rules overlap when their boxes intersect; a quantity a rule does
+    not name is unbounded for that rule."""
+    for name in set(w1) | set(w2):
+        lo1, hi1 = w1.get(name, [float("-inf"), float("inf")])
+        lo2, hi2 = w2.get(name, [float("-inf"), float("inf")])
+        if max(lo1, lo2) >= min(hi1, hi2):
+            return False
+    return True
+
+
 def check_truth(cases: list[dict], truth: dict) -> list[str]:
     errs: list[str] = []
+    index = by_id(cases)
     for case in active_cases(cases):
         cid = case["id"]
         if case["status"] != "measured":
@@ -201,19 +244,53 @@ def check_truth(cases: list[dict], truth: dict) -> list[str]:
             if tv.get("answer") is None:
                 errs.append(f"{cid}: measurement on {v} matches no option")
                 continue
+            if not isinstance(tv.get("estimate"), (int, float)):
+                errs.append(f"{cid}: no numeric estimate for {v}")
             answers[v] = tv["answer"]
         if len(answers) != len(case["versions"]):
             continue
         split = len(set(answers.values())) > 1
+        expected_cold = case["version_option"] if split else next(iter(answers.values()))
+        if t.get("cold_answer") != expected_cold:
+            errs.append(f"{cid}: cold answer {t.get('cold_answer')} should be {expected_cold}")
         if split and case["version_option"] is None:
             errs.append(f"{cid}: versions disagree {answers} but the case has no version option")
         if not split and case["version_option"] is not None:
             errs.append(f"{cid}: versions agree {answers} but the case offers a version option")
-        if case["control"] and any(a != case["folklore_answer"] for a in answers.values()):
-            errs.append(f"{cid}: control case, but the folklore answer is not the measured one {answers}")
-        if not case["control"] and any(a == case["folklore_answer"] for a in answers.values()):
+        newest = answers[case["versions"][-1]]
+        if case["control"]:
+            if any(a != case["folklore_answer"] for a in answers.values()):
+                errs.append(f"{cid}: control case, but the folklore answer is not the measured one {answers}")
+        elif case["folklore_answer"] in {expected_cold, newest}:
+            # The rule of thumb may have been right on an older version (a
+            # stale rule); it must be wrong for the cold and the newest answer.
             errs.append(f"{cid}: the folklore answer is the measured one {answers}; this is a control")
+        lengths = {k: len(text) for k, text in case["options"].items()}
+        for a in {expected_cold, newest} - {None}:
+            if lengths[a] > max(n for k, n in lengths.items() if k != a):
+                errs.append(f"{cid}: the measured answer {a} is the longest option text")
+        src = case["evidence"]["from"]
+        for v in case["versions"]:
+            src_truth = truth.get(src, {}).get("versions", {}).get(v)
+            if src_truth is None:
+                errs.append(f"{cid}: evidence source {src} has no truth for {v}")
+                continue
+            if "values" not in src_truth:
+                continue
+            leak = evidence_echo(case, t["versions"][v], index[src], src_truth)
+            if leak:
+                errs.append(f"{cid}: the evidence on {v} states {leak}, inside the estimate tolerance; copying it would score")
     return errs
+
+
+def evidence_echo(case: dict, target: dict, src_case: dict, src_truth: dict) -> list[float]:
+    """Numbers in the rendered evidence that fall inside the target's
+    estimate tolerance."""
+    text = render_evidence(case["evidence"]["text"], src_truth["values"], src_truth["n"])
+    lo, hi = case["estimate"]["tolerance"]
+    goal = target["estimate"]
+    numbers = [float(x.replace(",", "")) for x in re.findall(r"\d[\d,]*\.\d+", text)]
+    return [x for x in numbers if lo * goal <= x <= hi * goal]
 
 
 def syntax_errors(cases: list[dict]) -> tuple[list[str], list[str]]:

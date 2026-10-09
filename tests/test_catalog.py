@@ -1,6 +1,7 @@
 import pytest
 
 from memtrap.catalog import by_id, decide, estimate_value, eval_expr, render_evidence
+from tests.conftest import letter_of
 
 
 def test_eval_expr_arithmetic():
@@ -23,9 +24,9 @@ def test_eval_expr_unknown_name():
 def test_decide_picks_matching_rule(cases):
     p1 = by_id(cases)["P1"]
     mb = 1 << 20
-    assert decide(p1, {"a": 16 * mb, "b": 40 * mb}, 1_000_000) == "C"
-    assert decide(p1, {"a": 32 * mb, "b": 40 * mb}, 1_000_000) == "B"
-    assert decide(p1, {"a": 40 * mb, "b": 40 * mb}, 1_000_000) == "A"
+    assert decide(p1, {"a": 16 * mb, "b": 40 * mb}, 1_000_000) == letter_of(p1, "$b takes about 2.5x")
+    assert decide(p1, {"a": 32 * mb, "b": 40 * mb}, 1_000_000) == letter_of(p1, "$b takes about 25%")
+    assert decide(p1, {"a": 40 * mb, "b": 40 * mb}, 1_000_000) == letter_of(p1, "About the same")
 
 
 def test_decide_returns_none_between_options(cases):
@@ -36,8 +37,20 @@ def test_decide_returns_none_between_options(cases):
 def test_decide_two_quantities(cases):
     p5 = by_id(cases)["P5"]
     mb = 1 << 20
-    assert decide(p5, {"a": 16 * mb, "b": 0, "c": 16 * mb}, 1_000_000) == "B"
-    assert decide(p5, {"a": 16 * mb, "b": 16 * mb, "c": 0}, 1_000_000) == "A"
+    assert decide(p5, {"a": 16 * mb, "b": 0, "c": 16 * mb}, 1_000_000) == letter_of(p5, "Line 2 adds almost nothing")
+    assert decide(p5, {"a": 16 * mb, "b": 16 * mb, "c": 0}, 1_000_000) == letter_of(p5, "Line 2 adds a full copy")
+
+
+def test_decide_upper_bound_is_exclusive(cases):
+    p1 = by_id(cases)["P1"]
+    assert decide(p1, {"a": 10, "b": 11}, 1) == letter_of(p1, "$b takes about 25%")
+    assert decide(p1, {"a": 10, "b": 10.999}, 1) == letter_of(p1, "About the same")
+
+
+def test_decide_zero_denominator_is_unresolved(cases):
+    index = by_id(cases)
+    assert decide(index["P1"], {"a": 0, "b": 40}, 1) is None
+    assert decide(index["R3"], {"a": 100 * 600 * 1024, "peak": 0, "gc1": 0, "gc4": 0}, 100) is None
 
 
 def test_estimate_value_units(cases):

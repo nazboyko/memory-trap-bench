@@ -22,9 +22,10 @@ Answer every case before you look at the measurements, the notes or the model
 results. Same rules as the models in the cold condition: no runtime version is
 given, no tools, no running the code.
 
-For each case replace the question marks with an answer letter, an estimate in the unit the case names,
+For each case write an answer letter, an estimate in the unit the case names,
 a mechanism letter and a confidence from 0 to 100. Put them in
-`human/answers.json` next to this file, in this shape:
+`human/answers.json` next to this file, in this shape (replace every "?"
+and 0 with your own answer):
 
 ```json
 {
@@ -38,8 +39,6 @@ Then score yourself with:
 ```
 uv run python -m memtrap.score_human human/answers.json
 ```
-
-Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.
 """
 
 

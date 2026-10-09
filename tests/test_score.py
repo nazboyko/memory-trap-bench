@@ -117,4 +117,4 @@ def test_score_answers_missing_case_scores_zero(cases):
             "versions": {v: {"answer": "A", "estimate": 1.0} for v in c["versions"]},
         }
     rows, summary = score_answers({}, cases, truth)
-    assert summary["cases"] == 15 and summary["score"] == 0
+    assert summary["cases"] == 17 and summary["score"] == 0

@@ -14,9 +14,9 @@ def test_real_catalog_is_valid():
     assert errs == []
 
 
-def test_real_catalog_has_fifteen_cases_and_three_controls(cases):
+def test_real_catalog_has_seventeen_cases_and_three_controls(cases):
     active = [c for c in cases if c["status"] != "reserve"]
-    assert len(active) == 15
+    assert len(active) == 17
     assert sum(c["control"] for c in active) == 3
 
 

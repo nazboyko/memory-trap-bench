@@ -562,6 +562,90 @@
     "folklore_line": "Cast your keys to int, string keys cost more memory."
   },
   {
+    "id": "P8",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "measured",
+    "title": "One million two-element arrays",
+    "snippet_a": "$pairs = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $pairs[] = [$i, $i];\n}",
+    "snippet_b": "",
+    "question": "How much memory does $pairs take per pair, as reported by memory_get_usage() divided by the number of pairs?",
+    "options": {
+      "A": "About 230 bytes for every pair",
+      "B": "About 32 bytes for every pair",
+      "C": "About 410 bytes for every pair",
+      "D": "It depends on the PHP version"
+    },
+    "version_option": "D",
+    "folklore_answer": "B",
+    "mechanisms": {
+      "A": "Small arrays are stored inline in the outer array's slots, so the pairs cost only slightly more than the integers",
+      "B": "PHP shares one inner array between all pairs until one of them is written, so only the outer list costs memory",
+      "C": "Each inner array has its own header and a minimum allocation of eight slots, far more than its two values need",
+      "D": "Two integers of 16 bytes each per pair, plus one 16-byte slot per pair in the outer list, and nothing else"
+    },
+    "correct_mechanism": "C",
+    "folklore_mechanism": "D",
+    "variants": {
+      "a": "memory_get_usage() delta after building $pairs"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n"
+      },
+      "rules": [
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              20,
+              50
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              180,
+              300
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              300,
+              520
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory taken by $pairs in total, in MB",
+      "unit": "MB",
+      "expr": "a / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.1",
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P3",
+      "text": "On this runtime, 100,000 arrays with three string keys each measured {b_MB} MB with memory_get_usage()."
+    },
+    "why_it_matters": "Returning rows as small arrays multiplies memory per row far beyond the size of the values.",
+    "folklore_line": "An array of two ints is two ints."
+  },
+  {
     "id": "G1",
     "runtime": "go",
     "family": "maps",
@@ -1426,6 +1510,99 @@
     "folklore_line": "Every goroutine starts with a 2 KB stack."
   },
   {
+    "id": "R6",
+    "runtime": "go",
+    "family": "stacks",
+    "control": false,
+    "status": "measured",
+    "title": "Idle goroutines started after big-stack goroutines exited",
+    "snippet_a": "var sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started, exited sync.WaitGroup\nholdDone := make(chan struct{})\nstarted.Add(100_000)\nexited.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\thold8k(&started, holdDone)\n\t\texited.Done()\n\t}()\n}\nstarted.Wait()\nruntime.GC()\nclose(holdDone)\nexited.Wait()\n\nvar idle sync.WaitGroup\ndone := make(chan struct{})\nidle.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tidle.Done()\n\t\t<-done\n\t}()\n}\nidle.Wait()",
+    "snippet_b": "",
+    "question": "The first batch has exited. How much stack (StackInuse, compared with before the first batch) does each goroutine of the second, idle batch hold?",
+    "options": {
+      "A": "About 16 KB",
+      "B": "About 32 KB",
+      "C": "About 2 KB",
+      "D": "About 8 KB"
+    },
+    "version_option": null,
+    "folklore_answer": "C",
+    "mechanisms": {
+      "A": "Exited goroutines keep their stacks forever and the new ones get fresh ones, so the second batch adds a full extra set on top",
+      "B": "Every new goroutine starts with the minimum stack and grows it only when its own frames need more space",
+      "C": "A goroutine that reuses an exited descriptor gets the starting size computed from the stacks the last GC scanned",
+      "D": "The runtime caps the starting stack of idle goroutines at half of the largest stack it has seen so far in the process"
+    },
+    "correct_mechanism": "C",
+    "folklore_mechanism": "B",
+    "variants": {
+      "a": "StackInuse delta with the second batch waiting, read without a collection",
+      "a_after_gc": "the same after one runtime.GC()"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n"
+      },
+      "rules": [
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              1536,
+              3072
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "q": [
+              6144,
+              12288
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              12288,
+              24576
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              24576,
+              49152
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "stack per goroutine of the second batch, in KB",
+      "unit": "KB",
+      "expr": "a / n / KB",
+      "metric": "StackInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "R1",
+      "text": "On this runtime, 100,000 goroutines blocked on a channel with nothing on their stacks took {a_MB} MB of StackInuse."
+    },
+    "why_it_matters": "The same idle goroutine costs 2 KB or 16 KB depending on what ran before it.",
+    "folklore_line": "Every goroutine starts with a 2 KB stack."
+  },
+  {
     "id": "P7",
     "runtime": "php",
     "family": "arrays",
@@ -1519,90 +1696,6 @@
     "folklore_line": "unset() and array_slice() both drop the elements, pick whichever reads better."
   },
   {
-    "id": "P8",
-    "runtime": "php",
-    "family": "arrays",
-    "control": false,
-    "status": "reserve",
-    "title": "One million two-element arrays",
-    "snippet_a": "$pairs = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $pairs[] = [$i, $i];\n}",
-    "snippet_b": "",
-    "question": "How much memory does $pairs take, as reported by memory_get_usage()?",
-    "options": {
-      "A": "About 32 MB",
-      "B": "About 100 MB",
-      "C": "About 220 MB",
-      "D": "It depends on the PHP version"
-    },
-    "version_option": "D",
-    "folklore_answer": "A",
-    "mechanisms": {
-      "A": "Two integers of 16 bytes each per pair, plus one 16-byte slot per pair in the outer list, and nothing else",
-      "B": "Each inner array has its own header and a minimum allocation of eight slots, far more than its two values need",
-      "C": "Small arrays are stored inline in the outer array's slots, so the pairs cost only slightly more than the integers",
-      "D": "PHP shares one inner array between all pairs until one of them is written, so only the outer list costs memory"
-    },
-    "correct_mechanism": "B",
-    "folklore_mechanism": "A",
-    "variants": {
-      "a": "memory_get_usage() delta after building $pairs"
-    },
-    "decision": {
-      "quantities": {
-        "mb": "a / MB"
-      },
-      "rules": [
-        {
-          "option": "A",
-          "when": {
-            "mb": [
-              20,
-              50
-            ]
-          }
-        },
-        {
-          "option": "B",
-          "when": {
-            "mb": [
-              70,
-              140
-            ]
-          }
-        },
-        {
-          "option": "C",
-          "when": {
-            "mb": [
-              160,
-              300
-            ]
-          }
-        }
-      ]
-    },
-    "estimate": {
-      "what": "memory taken by $pairs, in MB",
-      "unit": "MB",
-      "expr": "a / MB",
-      "metric": "memory_get_usage",
-      "tolerance": [
-        0.67,
-        1.5
-      ]
-    },
-    "versions": [
-      "php-8.1",
-      "php-8.3"
-    ],
-    "evidence": {
-      "from": "P3",
-      "text": "On this runtime, 100,000 arrays with three string keys each measured {b_MB} MB with memory_get_usage()."
-    },
-    "why_it_matters": "Returning rows as small arrays multiplies memory per row far beyond the size of the values.",
-    "folklore_line": "An array of two ints is two ints."
-  },
-  {
     "id": "R5",
     "runtime": "go",
     "family": "stacks",
@@ -1694,98 +1787,5 @@
     },
     "why_it_matters": "A single call with a big local buffer leaves its stack behind until the collector has run a few times.",
     "folklore_line": "The stack is released when the function returns."
-  },
-  {
-    "id": "R6",
-    "runtime": "go",
-    "family": "stacks",
-    "control": false,
-    "status": "reserve",
-    "title": "Idle goroutines started after big-stack goroutines exited",
-    "snippet_a": "var sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started, exited sync.WaitGroup\nholdDone := make(chan struct{})\nstarted.Add(100_000)\nexited.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\thold8k(&started, holdDone)\n\t\texited.Done()\n\t}()\n}\nstarted.Wait()\nruntime.GC()\nclose(holdDone)\nexited.Wait()\n\nvar idle sync.WaitGroup\ndone := make(chan struct{})\nidle.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tidle.Done()\n\t\t<-done\n\t}()\n}\nidle.Wait()",
-    "snippet_b": "",
-    "question": "The first batch has exited. How much stack (StackInuse, compared with before the first batch) does each goroutine of the second, idle batch hold?",
-    "options": {
-      "A": "About 2 KB",
-      "B": "About 16 KB",
-      "C": "About 8 KB",
-      "D": "About 4 KB"
-    },
-    "version_option": null,
-    "folklore_answer": "A",
-    "mechanisms": {
-      "A": "Every new goroutine starts with the minimum stack and grows it only when its own frames need more space",
-      "B": "A goroutine that reuses an exited descriptor gets the starting size computed from the stacks the last GC scanned",
-      "C": "Exited goroutines keep their stacks forever and the new ones get fresh ones, so the second batch adds a full extra set on top",
-      "D": "The runtime caps the starting stack of idle goroutines at half of the largest stack it has seen so far in the process"
-    },
-    "correct_mechanism": "B",
-    "folklore_mechanism": "A",
-    "variants": {
-      "a": "StackInuse delta with the second batch waiting, read without a collection",
-      "a_after_gc": "the same after one runtime.GC()"
-    },
-    "decision": {
-      "quantities": {
-        "q": "a / n"
-      },
-      "rules": [
-        {
-          "option": "A",
-          "when": {
-            "q": [
-              1536,
-              3072
-            ]
-          }
-        },
-        {
-          "option": "D",
-          "when": {
-            "q": [
-              3072,
-              6144
-            ]
-          }
-        },
-        {
-          "option": "C",
-          "when": {
-            "q": [
-              6144,
-              12288
-            ]
-          }
-        },
-        {
-          "option": "B",
-          "when": {
-            "q": [
-              12288,
-              24576
-            ]
-          }
-        }
-      ]
-    },
-    "estimate": {
-      "what": "stack per goroutine of the second batch, in KB",
-      "unit": "KB",
-      "expr": "a / n / KB",
-      "metric": "StackInuse",
-      "tolerance": [
-        0.67,
-        1.5
-      ]
-    },
-    "versions": [
-      "go-1.24"
-    ],
-    "evidence": {
-      "from": "R1",
-      "text": "On this runtime, 100,000 goroutines blocked on a channel with nothing on their stacks took {a_MB} MB of StackInuse."
-    },
-    "why_it_matters": "The same idle goroutine costs 2 KB or 16 KB depending on what ran before it.",
-    "folklore_line": "Every goroutine starts with a 2 KB stack."
   }
 ]

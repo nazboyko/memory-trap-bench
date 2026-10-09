@@ -14,6 +14,7 @@ Three readings per runtime version on GitHub Actions (linux/amd64), median. PHP 
 | P4 | SplFixedArray versus a plain list of integers | PHP 8.1: A. $fixed takes about half as much (r = 0.48; 15.26 MB)<br>PHP 8.3: B. About the same (r = 0.95; 15.26 MB) | D. It depends on the PHP version | A. $fixed takes about half as much |
 | P5 | Assignment of a big array, then one append | PHP 8.3: C. Line 2 adds almost nothing; line 3 adds a full copy of $a (r2 = 0.00, r3 = 1.00; 16.0 MB) | C. Line 2 adds almost nothing; line 3 adds a full copy of $a | A. Line 2 adds a full copy of $a; line 3 adds almost nothing |
 | P6 | Integer keys versus numeric string keys | PHP 8.3: A. About the same (r = 1.00; 16.0 MB) | A. About the same | C. $strings takes about twice as much |
+| P8 | One million two-element arrays | PHP 8.1: C. About 410 bytes for every pair (q = 409.56; 390.59 MB)<br>PHP 8.3: A. About 230 bytes for every pair (q = 232.78; 222.0 MB) | D. It depends on the PHP version | B. About 32 bytes for every pair |
 | G1 | Heap held by a map of one million int64 pairs | Go 1.23: C. About 40 bytes per entry (q = 40.17; 38.3 MB)<br>Go 1.24: C. About 40 bytes per entry (q = 38.13; 36.36 MB) | C. About 40 bytes per entry | B. About 16 bytes per entry |
 | G2 | An emptied map: delete every key versus clear() | Go 1.23: A. Both keep about the full size (rd = 1.00, rc = 1.00; 38.3 MB)<br>Go 1.24: A. Both keep about the full size (rd = 1.00, rc = 1.00; 36.38 MB) | A. Both keep about the full size | C. Both give the memory back |
 | G3 | map[int64]struct{} versus map[int64]bool | Go 1.23: A. set is about 10% smaller (r = 0.91; 21.3 MB)<br>Go 1.24: C. About the same (r = 1.00; 36.37 MB) | D. It depends on the Go version | B. set is about half the size of flags |
@@ -23,10 +24,11 @@ Three readings per runtime version on GitHub Actions (linux/amd64), median. PHP 
 | R2 | Goroutines that hold an 8 KB local array | Go 1.24: C. About 16 KB (q = 16384.33; 16.0 KB) | C. About 16 KB | D. About 10 KB |
 | R3 | Stack after a deep recursion returns | Go 1.24: B. About a quarter of that size (kb = 512.32, r = 0.25; 512.32 KB) | B. About a quarter of that size | A. Back to the starting size of about 2 KB |
 | R4 (control) | New goroutines started while big-stack goroutines are alive | Go 1.24: B. About 2 KB (q = 2047.34; 2.0 KB) | B. About 2 KB | B. About 2 KB |
+| R6 | Idle goroutines started after big-stack goroutines exited | Go 1.24: A. About 16 KB (q = 16387.28; 16.0 KB) | A. About 16 KB | C. About 2 KB |
 
 ![measured ratios by version](charts/split_cases.png)
 
-Prompts per task: cold 15, versioned 18, evidence 18. Cases whose answer differs between the two versions asked are asked once per version in the versioned and evidence tasks.
+Prompts per task: cold 17, versioned 21, evidence 21. Cases whose answer differs between the two versions asked are asked once per version in the versioned and evidence tasks.
 
 ## 2. Model results
 

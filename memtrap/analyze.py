@@ -246,7 +246,8 @@ def chart_split_cases(cases: list[dict], truth: dict, out: Path) -> Path:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    split = [c for c in active_cases(cases) if truth[c["id"]]["version_split"]]
+    split = [c for c in active_cases(cases)
+             if truth[c["id"]]["version_split"] and list(c["decision"]["quantities"]) == ["r"]]
     fig = _figure(plt, 10, 3.8)
     axes = fig.subplots(1, len(split))
     labels = {
@@ -256,7 +257,7 @@ def chart_split_cases(cases: list[dict], truth: dict, out: Path) -> Path:
     }
     for ax, case in zip(axes, split):
         t = truth[case["id"]]
-        qname = next(iter(case["decision"]["quantities"]))
+        qname = "r"
         versions = sorted(t["versions"], key=lambda v: tuple(int(x) for x in v.split("-")[1].split(".")))
         vals = [t["versions"][v]["quantities"][qname] for v in versions]
         xs = range(len(versions))

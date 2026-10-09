@@ -29,7 +29,7 @@ TASKS = {
         "function": "memtrap_cold",
         "title": "MemoryTrap Bench: cold (code only)",
         "description": (
-            "Fifteen questions about memory use in PHP arrays, Go maps and goroutine stacks, asked with "
+            "Seventeen questions about memory use in PHP arrays, Go maps and goroutine stacks, asked with "
             "the code only. Each reply is scored against numbers measured on pinned runtime versions: "
             "the answer option, an estimate within 0.67x to 1.5x of the measured value, and the "
             "mechanism, one third each. Three cases are controls where the rule of thumb holds."

@@ -3,7 +3,9 @@ import json
 
 import pytest
 
-from memtrap.catalog import load_cases
+from memtrap.catalog import active_cases, load_cases
+
+N_CASES = len(active_cases(load_cases()))
 
 
 @pytest.fixture

@@ -372,6 +372,60 @@ ITEMS = {'P1': {'case_id': 'P1',
         'expect_answer': 'P6 answer A: About the same',
         'expect_mechanism': 'P6 mechanism B',
         'expect_estimate': 'P6 estimate within 0.67x-1.5x of the measured 16 MB'},
+ 'P8': {'case_id': 'P8',
+        'condition': 'cold',
+        'version': None,
+        'unit': 'MB',
+        'prompt': 'A question about memory use in PHP. Read the code, then answer.\n'
+                  '\n'
+                  '```php\n'
+                  '$pairs = [];\n'
+                  'for ($i = 0; $i < 1_000_000; $i++) {\n'
+                  '    $pairs[] = [$i, $i];\n'
+                  '}\n'
+                  '```\n'
+                  '\n'
+                  'Question: How much memory does $pairs take per pair, as reported by memory_get_usage() '
+                  'divided by the number of pairs?\n'
+                  '\n'
+                  'Answer options:\n'
+                  'A. About 230 bytes for every pair\n'
+                  'B. About 32 bytes for every pair\n'
+                  'C. About 410 bytes for every pair\n'
+                  'D. It depends on the PHP version\n'
+                  '\n'
+                  'Which explanation best describes the cause?\n'
+                  "A. Small arrays are stored inline in the outer array's slots, so the pairs cost only "
+                  'slightly more than the integers\n'
+                  'B. PHP shares one inner array between all pairs until one of them is written, so only the '
+                  'outer list costs memory\n'
+                  'C. Each inner array has its own header and a minimum allocation of eight slots, far more '
+                  'than its two values need\n'
+                  'D. Two integers of 16 bytes each per pair, plus one 16-byte slot per pair in the outer '
+                  'list, and nothing else\n'
+                  '\n'
+                  'Estimate: memory taken by $pairs in total, in MB. Sizes are binary: 1 MB = 1,048,576 '
+                  'bytes, 1 KB = 1,024 bytes.\n'
+                  '\n'
+                  'Reply with one JSON object and nothing else, in this shape:\n'
+                  '{"answer": "<letter>", "estimate": <number>, "mechanism": "<letter>", "confidence": '
+                  '<integer>, "reasoning": "<text>"}\n'
+                  'answer: the letter of the answer option. estimate: a number in MB. mechanism: the letter '
+                  'of the explanation. confidence: an integer from 0 to 100 for how sure you are about the '
+                  'answer. reasoning: at most 60 words.',
+        'case': {'id': 'P8',
+                 'control': False,
+                 'correct_mechanism': 'C',
+                 'folklore_mechanism': 'D',
+                 'folklore_answer': 'B',
+                 'versions': ['php-8.1', 'php-8.3'],
+                 'estimate': {'tolerance': [0.67, 1.5]}},
+        'truth': {'cold_answer': 'D',
+                  'versions': {'php-8.1': {'answer': 'C', 'estimate': 390.59},
+                               'php-8.3': {'answer': 'A', 'estimate': 222.0}}},
+        'expect_answer': 'P8 answer D: It depends on the PHP version',
+        'expect_mechanism': 'P8 mechanism C',
+        'expect_estimate': 'P8 estimate within 0.67x-1.5x of the measured 222 or 390.59 MB'},
  'G1': {'case_id': 'G1',
         'condition': 'cold',
         'version': None,
@@ -950,7 +1004,93 @@ ITEMS = {'P1': {'case_id': 'P1',
         'truth': {'cold_answer': 'B', 'versions': {'go-1.24': {'answer': 'B', 'estimate': 2.0}}},
         'expect_answer': 'R4 answer B: About 2 KB',
         'expect_mechanism': 'R4 mechanism A',
-        'expect_estimate': 'R4 estimate within 0.67x-1.5x of the measured 2 KB'}}
+        'expect_estimate': 'R4 estimate within 0.67x-1.5x of the measured 2 KB'},
+ 'R6': {'case_id': 'R6',
+        'condition': 'cold',
+        'version': None,
+        'unit': 'KB',
+        'prompt': 'A question about memory use in Go. Read the code, then answer.\n'
+                  '\n'
+                  '```go\n'
+                  'var sink atomic.Int64\n'
+                  '\n'
+                  'func hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n'
+                  '\tvar buf [8192]byte\n'
+                  '\tfor i := range buf {\n'
+                  '\t\tbuf[i] = byte(i)\n'
+                  '\t}\n'
+                  '\tstarted.Done()\n'
+                  '\t<-done\n'
+                  '\tsink.Add(int64(buf[len(buf)-1]))\n'
+                  '}\n'
+                  '\n'
+                  '// in main:\n'
+                  'var started, exited sync.WaitGroup\n'
+                  'holdDone := make(chan struct{})\n'
+                  'started.Add(100_000)\n'
+                  'exited.Add(100_000)\n'
+                  'for i := 0; i < 100_000; i++ {\n'
+                  '\tgo func() {\n'
+                  '\t\thold8k(&started, holdDone)\n'
+                  '\t\texited.Done()\n'
+                  '\t}()\n'
+                  '}\n'
+                  'started.Wait()\n'
+                  'runtime.GC()\n'
+                  'close(holdDone)\n'
+                  'exited.Wait()\n'
+                  '\n'
+                  'var idle sync.WaitGroup\n'
+                  'done := make(chan struct{})\n'
+                  'idle.Add(100_000)\n'
+                  'for i := 0; i < 100_000; i++ {\n'
+                  '\tgo func() {\n'
+                  '\t\tidle.Done()\n'
+                  '\t\t<-done\n'
+                  '\t}()\n'
+                  '}\n'
+                  'idle.Wait()\n'
+                  '```\n'
+                  '\n'
+                  'Question: The first batch has exited. How much stack (StackInuse, compared with before '
+                  'the first batch) does each goroutine of the second, idle batch hold?\n'
+                  '\n'
+                  'Answer options:\n'
+                  'A. About 16 KB\n'
+                  'B. About 32 KB\n'
+                  'C. About 2 KB\n'
+                  'D. About 8 KB\n'
+                  '\n'
+                  'Which explanation best describes the cause?\n'
+                  'A. Exited goroutines keep their stacks forever and the new ones get fresh ones, so the '
+                  'second batch adds a full extra set on top\n'
+                  'B. Every new goroutine starts with the minimum stack and grows it only when its own '
+                  'frames need more space\n'
+                  'C. A goroutine that reuses an exited descriptor gets the starting size computed from the '
+                  'stacks the last GC scanned\n'
+                  'D. The runtime caps the starting stack of idle goroutines at half of the largest stack it '
+                  'has seen so far in the process\n'
+                  '\n'
+                  'Estimate: stack per goroutine of the second batch, in KB. Sizes are binary: 1 MB = '
+                  '1,048,576 bytes, 1 KB = 1,024 bytes.\n'
+                  '\n'
+                  'Reply with one JSON object and nothing else, in this shape:\n'
+                  '{"answer": "<letter>", "estimate": <number>, "mechanism": "<letter>", "confidence": '
+                  '<integer>, "reasoning": "<text>"}\n'
+                  'answer: the letter of the answer option. estimate: a number in KB. mechanism: the letter '
+                  'of the explanation. confidence: an integer from 0 to 100 for how sure you are about the '
+                  'answer. reasoning: at most 60 words.',
+        'case': {'id': 'R6',
+                 'control': False,
+                 'correct_mechanism': 'C',
+                 'folklore_mechanism': 'B',
+                 'folklore_answer': 'C',
+                 'versions': ['go-1.24'],
+                 'estimate': {'tolerance': [0.67, 1.5]}},
+        'truth': {'cold_answer': 'A', 'versions': {'go-1.24': {'answer': 'A', 'estimate': 16.0}}},
+        'expect_answer': 'R6 answer A: About 16 KB',
+        'expect_mechanism': 'R6 mechanism C',
+        'expect_estimate': 'R6 estimate within 0.67x-1.5x of the measured 16 KB'}}
 
 if ITEM_LIMIT:
     ITEMS = dict(list(ITEMS.items())[:ITEM_LIMIT])

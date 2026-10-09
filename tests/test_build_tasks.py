@@ -5,6 +5,7 @@ import pytest
 
 from memtrap.build_tasks import TASKS, BuildError, build_items, module_source, render_task
 from memtrap.catalog import ROOT, by_id, load_truth
+from tests.conftest import N_CASES
 
 
 @pytest.fixture
@@ -13,10 +14,10 @@ def truth():
 
 
 def test_item_counts(cases, truth):
-    assert len(build_items(cases, truth, "cold")) == 15
+    assert len(build_items(cases, truth, "cold")) == N_CASES == 17
     split = sum(1 for c in cases if c["status"] == "measured" and truth[c["id"]]["version_split"])
-    assert len(build_items(cases, truth, "versioned")) == 15 + split
-    assert len(build_items(cases, truth, "evidence")) == 15 + split
+    assert len(build_items(cases, truth, "versioned")) == N_CASES + split
+    assert len(build_items(cases, truth, "evidence")) == N_CASES + split
 
 
 def test_split_case_is_asked_per_version(cases, truth):

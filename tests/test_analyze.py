@@ -3,9 +3,10 @@ import json
 import pytest
 
 from memtrap.analyze import build_report, load_runs, score_run, task_score
-from memtrap.build_tasks import OUT_DIR, TASKS
+from memtrap.build_tasks import OUT_DIR, TASKS, build_items
 from memtrap.catalog import ROOT, load_cases, load_truth
 from memtrap.stub_run import load_task, run_stub
+from tests.conftest import N_CASES
 
 
 @pytest.fixture(scope="module")
@@ -50,7 +51,7 @@ def test_missing_items_count_as_errored(stub_runs, tmp_path):
     data["subruns"] = data["subruns"][:-2]
     rows, meta = score_run({**entry, "data": data}, cases, truth)
     assert meta["errored_items"] == 2
-    assert sum(r["case_score"] for r in rows) == 13
+    assert sum(r["case_score"] for r in rows) == N_CASES - 2
 
 
 def test_report_sections_and_controls(stub_runs, tmp_path):
@@ -62,7 +63,8 @@ def test_report_sections_and_controls(stub_runs, tmp_path):
                     "## 9. Controls", "## 11. Folklore in the models' own words"):
         assert heading in text
     assert "| `stub-correct` | 1.00 | 1.00 | 1.00 | 1.00 | 0 |" in text
-    assert "| `stub-garbage` | 0.00 | 0.00 | 0.00 | 0.00 | 51 |" in text
+    total = sum(len(build_items(cases, truth, c)) for c in ("cold", "versioned", "evidence"))
+    assert f"| `stub-garbage` | 0.00 | 0.00 | 0.00 | 0.00 | {total} |" in text
     for cid in ("G4", "R1", "R4"):
         assert f"| {cid} | control | n/a | n/a |" in text
     for name in ("split_cases.png", "leaderboard.png", "heatmap_cold.png", "mechanism.png", "confidence.png"):

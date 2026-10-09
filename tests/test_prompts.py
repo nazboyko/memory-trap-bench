@@ -49,7 +49,7 @@ def test_quiz_has_every_case_and_no_answers(cases):
 
     text = render_quiz(cases)
     active = [c for c in cases if c["status"] != "reserve"]
-    assert text.count("## Case ") == len(active) == 15
+    assert text.count("## Case ") == len(active) == 17
     for case in active:
         assert case["folklore_line"] not in text
         assert case["why_it_matters"] not in text

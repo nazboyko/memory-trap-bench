@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MemoryTrap Bench</title>
+<meta name="description" content="Fifteen memory questions about PHP arrays, Go maps and goroutine stacks. Guess, then see what the runtime measured.">
+<style>
+:root {
+  color-scheme: light;
+  --paper: #f7f8f5;
+  --grid: #e4e9ea;
+  --ink: #1d2a3a;
+  --muted: #5b6874;
+  --rule: #c8372d;
+  --mark: #ffe45c;
+  --mark-ink: #1d2a3a;
+  --code-bg: #eef1f0;
+  --line: #cfd6d8;
+  --php: #6f73ad;
+  --go: #007d9c;
+  --ok: #1f7a4d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #121a24;
+    --grid: #1b2633;
+    --ink: #e4ebf2;
+    --muted: #9aa8b5;
+    --rule: #ff7a6e;
+    --mark: #d9b92e;
+    --mark-ink: #121a24;
+    --code-bg: #182230;
+    --line: #2a3747;
+    --php: #a3a7e0;
+    --go: #4cc7e6;
+    --ok: #5fd39a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #121a24; --grid: #1b2633; --ink: #e4ebf2; --muted: #9aa8b5; --rule: #ff7a6e;
+  --mark: #d9b92e; --mark-ink: #121a24; --code-bg: #182230; --line: #2a3747;
+  --php: #a3a7e0; --go: #4cc7e6; --ok: #5fd39a;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font-family: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 18px;
+  line-height: 1.6;
+}
+main { max-width: 46rem; margin: 0 auto; padding: 3rem 1rem 5rem; }
+header h1 { font-size: 2.6rem; line-height: 1.1; margin: 0 0 1rem; letter-spacing: -0.01em; }
+header p { margin: 0 0 1rem; max-width: 38rem; }
+.score { position: sticky; top: 0; z-index: 2; margin: 1.5rem -1rem 2rem; padding: 0.6rem 1rem;
+  background: var(--paper); border-bottom: 1px solid var(--line); font-size: 1rem; color: var(--muted); }
+.score strong { color: var(--ink); }
+article { margin: 0 0 3.5rem; }
+.head { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.id { font-weight: 700; font-size: 1.35rem; }
+.tag { font-size: 0.85rem; padding: 0 0.5rem; border-radius: 3px; color: var(--paper); }
+.tag.php { background: var(--php); }
+.tag.go { background: var(--go); }
+.control { font-size: 0.9rem; color: var(--muted); font-style: italic; }
+pre { margin: 0.75rem 0; padding: 0.9rem 1rem; background: var(--code-bg); border-left: 3px solid var(--line);
+  overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.82rem; line-height: 1.5; tab-size: 4; }
+.q { margin: 1rem 0 0.75rem; }
+.opts { display: grid; gap: 0.5rem; }
+.opts button {
+  font: inherit; font-size: 1rem; text-align: left; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0.55rem 0.8rem; cursor: pointer;
+  display: flex; gap: 0.75rem; align-items: baseline;
+}
+.opts button .k { font-weight: 700; min-width: 1.1rem; }
+.opts button:hover:not(:disabled) { border-color: var(--ink); }
+.opts button:focus-visible { outline: 3px solid var(--go); outline-offset: 2px; }
+.opts button:disabled { cursor: default; }
+.opts button.picked { border-color: var(--ink); border-width: 2px; }
+.opts button.right .k::after { content: " \2713"; color: var(--ok); }
+.opts button.folk:not(.right) .t { text-decoration: line-through; text-decoration-color: var(--rule); text-decoration-thickness: 2px; }
+.reveal { margin-top: 1rem; padding-top: 0.25rem; }
+.reveal[hidden] { display: none; }
+.verdict { font-weight: 700; margin: 0.5rem 0; }
+.measure { margin: 0.5rem 0; padding: 0; list-style: none; }
+.measure li { margin: 0.35rem 0; }
+.mark { background: linear-gradient(transparent 12%, var(--mark) 12%, var(--mark) 88%, transparent 88%);
+  color: var(--mark-ink); padding: 0 0.25rem; font-weight: 700; }
+.small { font-size: 0.95rem; color: var(--muted); }
+.rule { color: var(--rule); }
+footer { border-top: 1px solid var(--line); padding-top: 1rem; font-size: 0.95rem; color: var(--muted); }
+a { color: inherit; }
+@media (max-width: 560px) {
+  body { font-size: 17px; }
+  header h1 { font-size: 2rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .reveal:not([hidden]) { animation: show 0.25s ease-out; }
+  @keyframes show { from { opacity: 0; } to { opacity: 1; } }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>MemoryTrap Bench</h1>
+<p>Fifteen questions about memory in PHP arrays, Go maps and goroutine stacks. Pick an answer first. Then the page shows what a harness measured on real runtime versions, and which rule of thumb it broke.</p>
+<p class="small">No runtime version is given in the question, the same way the models saw it in the cold condition. When the measured answer changes between versions, the right answer is the version option. Sizes are binary: 1 MB = 1,048,576 bytes.</p>
+</header>
+<div class="score" aria-live="polite">Your guesses: <strong id="right">0</strong> right of <strong id="done">0</strong> answered, <span id="left"></span> to go. <button id="reset" type="button" class="small" style="font:inherit;background:none;border:0;text-decoration:underline;cursor:pointer;color:inherit">Start over</button></div>
+<div id="cases"></div>
+<footer>
+<p>Measured on GitHub Actions (PHP 8.1 to 8.4 CLI with opcache off, Go 1.23 to 1.26 on linux/amd64), three readings each, median. Code, raw readings and model replies: <a href="https://github.com/nazboyko/memory-trap-bench">https://github.com/nazboyko/memory-trap-bench</a>.</p>
+</footer>
+</main>
+<script>
+const CASES = [{"id": "P1", "runtime": "php", "family": "arrays", "control": false, "snippets": ["$a = range(1, 1_000_000);", "$b = [];\nfor ($i = 1_000_000; $i >= 1; $i--) {\n    $b[$i] = $i;\n}"], "question": "Both arrays hold the same one million integers. How does the memory taken by $b compare with the memory taken by $a, as reported by memory_get_usage()?", "options": {"A": "$b takes about 25% more than $a", "B": "$b takes about 2.5x as much", "C": "About the same", "D": "It depends on the PHP version"}, "cold": "D", "split": true, "folklore": "C", "mechanism": "Descending keys force the hash layout (keyed buckets plus a hash index); range() builds a packed list, stored as bare values since PHP 8.2", "why": "A worker that builds a lookup table in reverse order can hit its container memory limit at well under the size the developer planned for.", "metric": "memory_get_usage", "estimate_what": "memory taken by $b", "measured": [{"version": "PHP 8.1", "answer": "A", "text": "$b takes about 25% more than $a", "quantities": {"r": 1.25}, "estimate": 40.0, "unit": "MB", "runtime_version": "8.1.34"}, {"version": "PHP 8.3", "answer": "B", "text": "$b takes about 2.5x as much", "quantities": {"r": 2.5}, "estimate": 40.0, "unit": "MB", "runtime_version": "8.3.35"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "P2", "runtime": "php", "family": "arrays", "control": false, "snippets": ["$a = range(1, 1_000_000);\nfor ($i = 0; $i < 1_000_000; $i += 2) {\n    unset($a[$i]);\n}"], "question": "After the loop removes half of the elements, how does the memory held by $a compare with the memory it held right before the loop, as reported by memory_get_usage()?", "options": {"A": "It stays about the same", "B": "It drops by about half", "C": "It drops by about a quarter", "D": "It grows"}, "cold": "A", "split": false, "folklore": "B", "mechanism": "unset() only marks each slot as empty; the array keeps its whole allocation until it is rebuilt or has to grow again", "why": "A long-running consumer that unsets processed items from a big batch array keeps paying for the whole batch until it ends.", "metric": "memory_get_usage", "estimate_what": "memory held by $a after the loop", "measured": [{"version": "PHP 8.1", "answer": "A", "text": "It stays about the same", "quantities": {"r": 1.0}, "estimate": 32.0, "unit": "MB", "runtime_version": "8.1.34"}, {"version": "PHP 8.3", "answer": "A", "text": "It stays about the same", "quantities": {"r": 1.0}, "estimate": 16.0, "unit": "MB", "runtime_version": "8.3.35"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "P3", "runtime": "php", "family": "arrays", "control": false, "snippets": ["final class Point\n{\n    public function __construct(\n        public int $x,\n        public int $y,\n        public int $z,\n    ) {}\n}\n\n$objects = [];\nfor ($i = 0; $i < 100_000; $i++) {\n    $objects[] = new Point($i, $i, $i);\n}", "$arrays = [];\nfor ($i = 0; $i < 100_000; $i++) {\n    $arrays[] = ['x' => $i, 'y' => $i, 'z' => $i];\n}"], "question": "How does the memory taken by $arrays compare with the memory taken by $objects, as reported by memory_get_usage()?", "options": {"A": "About the same", "B": "$arrays takes about 3 times as much", "C": "$arrays takes about 1.5 times as much", "D": "$arrays takes about half as much"}, "cold": "B", "split": false, "folklore": "D", "mechanism": "Declared properties sit in a fixed slot table inside each object; each array allocates its own hash table with spare buckets", "why": "Rows fetched as associative arrays instead of small DTO objects can triple the memory of a batch import.", "metric": "memory_get_usage", "estimate_what": "memory taken by $arrays", "measured": [{"version": "PHP 8.1", "answer": "B", "text": "$arrays takes about 3 times as much", "quantities": {"r": 2.82}, "estimate": 39.86, "unit": "MB", "runtime_version": "8.1.34"}, {"version": "PHP 8.3", "answer": "B", "text": "$arrays takes about 3 times as much", "quantities": {"r": 3.12}, "estimate": 37.86, "unit": "MB", "runtime_version": "8.3.35"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "P4", "runtime": "php", "family": "arrays", "control": false, "snippets": ["$fixed = new SplFixedArray(1_000_000);\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $fixed[$i] = $i;\n}", "$list = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $list[] = $i;\n}"], "question": "How does the memory taken by $fixed compare with the memory taken by $list, as reported by memory_get_usage()?", "options": {"A": "$fixed takes about half as much", "B": "About the same", "C": "$fixed takes about a quarter as much", "D": "It depends on the PHP version"}, "cold": "D", "split": true, "folklore": "A", "mechanism": "SplFixedArray stores plain values; a packed list stored keyed buckets before PHP 8.2 and has stored bare values since that release", "why": "Teams still rewrite hot paths to SplFixedArray for memory; on current PHP that buys almost nothing.", "metric": "memory_get_usage", "estimate_what": "memory taken by $fixed", "measured": [{"version": "PHP 8.1", "answer": "A", "text": "$fixed takes about half as much", "quantities": {"r": 0.48}, "estimate": 15.26, "unit": "MB", "runtime_version": "8.1.34"}, {"version": "PHP 8.3", "answer": "B", "text": "About the same", "quantities": {"r": 0.95}, "estimate": 15.26, "unit": "MB", "runtime_version": "8.3.35"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "P5", "runtime": "php", "family": "arrays", "control": false, "snippets": ["$a = range(1, 1_000_000);\n$b = $a;     // line 2\n$b[] = 0;    // line 3"], "question": "How much memory, as reported by memory_get_usage(), does line 2 add, and how much does line 3 add?", "options": {"A": "Line 2 adds a full copy of $a; line 3 adds almost nothing", "B": "Neither line adds more than a few kilobytes", "C": "Line 2 adds almost nothing; line 3 adds a full copy of $a", "D": "Each line adds a full copy of $a"}, "cold": "C", "split": false, "folklore": "A", "mechanism": "Assignment shares the array and counts references; the first write to $b separates it with a full copy of every element", "why": "Passing a big array into a function is free until the function writes one element; then the whole array is duplicated.", "metric": "memory_get_usage", "estimate_what": "memory added by line 3", "measured": [{"version": "PHP 8.3", "answer": "C", "text": "Line 2 adds almost nothing; line 3 adds a full copy of $a", "quantities": {"r2": 0.0, "r3": 1.0}, "estimate": 16.0, "unit": "MB", "runtime_version": "8.3.35"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "P6", "runtime": "php", "family": "arrays", "control": false, "snippets": ["$ints = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $ints[$i] = $i;\n}", "$strings = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $strings[(string) $i] = $i;\n}"], "question": "How does the memory taken by $strings compare with the memory taken by $ints, as reported by memory_get_usage()?", "options": {"A": "About the same", "B": "$strings takes about 30% more", "C": "$strings takes about twice as much", "D": "$strings takes noticeably less"}, "cold": "A", "split": false, "folklore": "C", "mechanism": "A string that looks like a decimal integer is converted to an integer key, so both arrays are identical lists", "why": "IDs that arrive as strings from JSON or a database driver do not make a lookup table any bigger.", "metric": "memory_get_usage", "estimate_what": "memory taken by $strings", "measured": [{"version": "PHP 8.3", "answer": "A", "text": "About the same", "quantities": {"r": 1.0}, "estimate": 16.0, "unit": "MB", "runtime_version": "8.3.35"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "G1", "runtime": "go", "family": "maps", "control": false, "snippets": ["m := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm[i] = i\n}"], "question": "After the loop and a runtime.GC(), how much heap does m hold per entry (runtime.MemStats.HeapInuse delta divided by the entry count)?", "options": {"A": "About 24 bytes per entry", "B": "About 16 bytes per entry", "C": "About 40 bytes per entry", "D": "About 64 bytes per entry"}, "cold": "C", "split": false, "folklore": "B", "mechanism": "Entries sit in fixed-size groups with per-slot metadata; the load factor keeps slots partly empty and tables grow in powers of two", "why": "A cache sized as entries times key-plus-value bytes uses more than twice the heap that was budgeted.", "metric": "HeapInuse", "estimate_what": "heap held by m in total", "measured": [{"version": "Go 1.23", "answer": "C", "text": "About 40 bytes per entry", "quantities": {"q": 40.17}, "estimate": 38.3, "unit": "MB", "runtime_version": "go1.23.12"}, {"version": "Go 1.24", "answer": "C", "text": "About 40 bytes per entry", "quantities": {"q": 38.13}, "estimate": 36.36, "unit": "MB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "G2", "runtime": "go", "family": "maps", "control": false, "snippets": ["m := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm[i] = i\n}\nfor i := int64(0); i < 1_000_000; i++ {\n\tdelete(m, i)\n}\nruntime.GC()", "m2 := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm2[i] = i\n}\nclear(m2)\nruntime.GC()"], "question": "Both maps are now empty and still referenced. After the runtime.GC() calls, how much heap (HeapInuse) does each one hold compared with the full map?", "options": {"A": "Both keep about the full size", "B": "m keeps about the full size; m2 gives the memory back", "C": "Both give the memory back", "D": "m gives the memory back; m2 keeps about the full size"}, "cold": "A", "split": false, "folklore": "C", "mechanism": "Neither delete() nor clear() shrinks a map; both reset the slots in place and keep every table the map has allocated", "why": "A long-lived map used as a work queue keeps its peak size for the life of the process, whatever you delete.", "metric": "HeapInuse", "estimate_what": "heap held by m after the deletes", "measured": [{"version": "Go 1.23", "answer": "A", "text": "Both keep about the full size", "quantities": {"rd": 1.0, "rc": 1.0}, "estimate": 38.3, "unit": "MB", "runtime_version": "go1.23.12"}, {"version": "Go 1.24", "answer": "A", "text": "Both keep about the full size", "quantities": {"rd": 1.0, "rc": 1.0}, "estimate": 36.38, "unit": "MB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "G3", "runtime": "go", "family": "maps", "control": false, "snippets": ["set := make(map[int64]struct{})\nfor i := int64(0); i < 1_000_000; i++ {\n\tset[i] = struct{}{}\n}", "flags := make(map[int64]bool)\nfor i := int64(0); i < 1_000_000; i++ {\n\tflags[i] = true\n}"], "question": "How does the heap held by set compare with the heap held by flags (HeapInuse after runtime.GC())?", "options": {"A": "set is about 10% smaller", "B": "set is about half the size of flags", "C": "About the same", "D": "It depends on the Go version"}, "cold": "D", "split": true, "folklore": "B", "mechanism": "The slot layout decides it: older maps kept values in a separate array; Swiss-table maps keep key and value in one aligned slot", "why": "Code reviews still ask for map[K]struct{} to save memory; the saving depends on the map implementation.", "metric": "HeapInuse", "estimate_what": "heap held by set", "measured": [{"version": "Go 1.23", "answer": "A", "text": "set is about 10% smaller", "quantities": {"r": 0.91}, "estimate": 21.3, "unit": "MB", "runtime_version": "go1.23.12"}, {"version": "Go 1.24", "answer": "C", "text": "About the same", "quantities": {"r": 1.0}, "estimate": 36.37, "unit": "MB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "G4", "runtime": "go", "family": "maps", "control": true, "snippets": ["pre := make(map[int64]int64, 1_000_000)\nfor i := int64(0); i < 1_000_000; i++ {\n\tpre[i] = i\n}", "grown := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tgrown[i] = i\n}"], "question": "Compare the total bytes the runtime allocates while each map is built, including memory freed along the way (runtime.MemStats.TotalAlloc delta). How does grown compare with pre?", "options": {"A": "grown allocates about twice as much", "B": "About the same", "C": "grown allocates about 4 times as much", "D": "grown allocates less"}, "cold": "A", "split": false, "folklore": "A", "mechanism": "Growing from empty rebuilds the table several times, and every old table becomes garbage", "why": "Control case: the rule of thumb holds, so a model that always bets against folklore loses here.", "metric": "TotalAlloc", "estimate_what": "total bytes allocated while building grown", "measured": [{"version": "Go 1.24", "answer": "A", "text": "grown allocates about twice as much", "quantities": {"r": 1.99}, "estimate": 71.88, "unit": "MB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "G5", "runtime": "go", "family": "maps", "control": false, "snippets": ["byValue := make(map[int64][256]byte)\nfor i := int64(0); i < 100_000; i++ {\n\tvar v [256]byte\n\tv[0] = byte(i)\n\tbyValue[i] = v\n}", "byPointer := make(map[int64]*[256]byte)\nfor i := int64(0); i < 100_000; i++ {\n\tv := new([256]byte)\n\tv[0] = byte(i)\n\tbyPointer[i] = v\n}"], "question": "Counting the arrays byPointer points to, how does the heap held by byValue compare with byPointer (HeapInuse after runtime.GC())?", "options": {"A": "byValue is about 1.5 times larger", "B": "About the same", "C": "byValue is smaller", "D": "byValue is about 3 times larger"}, "cold": "B", "split": false, "folklore": "D", "mechanism": "Values over 128 bytes are not kept in the slot; the map allocates each one separately and stores a pointer, like byPointer", "why": "Switching a map to pointer values to save memory adds GC work and saves nothing for large values.", "metric": "HeapInuse", "estimate_what": "heap held by byValue", "measured": [{"version": "Go 1.24", "answer": "B", "text": "About the same", "quantities": {"r": 1.0}, "estimate": 26.75, "unit": "MB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "R1", "runtime": "go", "family": "stacks", "control": true, "snippets": ["var started sync.WaitGroup\ndone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tstarted.Done()\n\t\t<-done\n\t}()\n}\nstarted.Wait()"], "question": "While all 100,000 goroutines are blocked on the channel, how much stack memory (runtime.MemStats.StackInuse delta) does each one take?", "options": {"A": "About 8 KB", "B": "About 256 bytes", "C": "About 2 KB", "D": "About 4 KB"}, "cold": "C", "split": false, "folklore": "C", "mechanism": "Every new goroutine starts with the minimum stack and grows it only when its own frames need more", "why": "Control case: the 2 KB rule holds for idle goroutines, so a model that always bets against folklore loses here.", "metric": "StackInuse", "estimate_what": "stack per goroutine", "measured": [{"version": "Go 1.24", "answer": "C", "text": "About 2 KB", "quantities": {"q": 2048.0}, "estimate": 2.0, "unit": "KB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "R2", "runtime": "go", "family": "stacks", "control": false, "snippets": ["var sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started sync.WaitGroup\ndone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo hold8k(&started, done)\n}\nstarted.Wait()"], "question": "While all 100,000 goroutines wait, how much stack memory (StackInuse delta) does each one take?", "options": {"A": "About 8 KB", "B": "About 2 KB", "C": "About 16 KB", "D": "About 10 KB"}, "cold": "C", "split": false, "folklore": "D", "mechanism": "Stacks grow by doubling: a frame that does not fit is copied into a stack twice the size, until it fits", "why": "A worker pool whose handler keeps a modest buffer on the stack costs eight times the 2 KB per goroutine people budget for.", "metric": "StackInuse", "estimate_what": "stack per goroutine", "measured": [{"version": "Go 1.24", "answer": "C", "text": "About 16 KB", "quantities": {"q": 16384.33}, "estimate": 16.0, "unit": "KB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "R3", "runtime": "go", "family": "stacks", "control": false, "snippets": ["var sink atomic.Int64\n\nfunc deep(n int) byte {\n\tvar pad [1024]byte\n\tpad[n%len(pad)] = byte(n)\n\tif n == 0 {\n\t\treturn pad[0]\n\t}\n\treturn deep(n-1) + pad[n%len(pad)]\n}\n\n// in main, with the collector off (debug.SetGCPercent(-1)):\nvar returned sync.WaitGroup\ndone := make(chan struct{})\nreturned.Add(100)\nfor i := 0; i < 100; i++ {\n\tgo func() {\n\t\tsink.Add(int64(deep(1000)))\n\t\treturned.Done()\n\t\t<-done\n\t}()\n}\nreturned.Wait()\nruntime.GC()\nruntime.GC()"], "question": "Each goroutine recursed 1,000 levels deep once, returned and now waits. After the two runtime.GC() calls, how much stack does each goroutine hold compared with its size right after deep() returned (StackInuse)?", "options": {"A": "Back to the starting size of about 2 KB", "B": "About a quarter of that size", "C": "Still the full size; goroutine stacks never shrink", "D": "About half of that size"}, "cold": "B", "split": false, "folklore": "A", "mechanism": "Each garbage collection halves a stack that uses less than a quarter of its size, one halving per cycle", "why": "One deep request handler can keep a large stack for minutes on an idle goroutine, and it shrinks only as fast as the GC runs.", "metric": "StackInuse", "estimate_what": "stack held by each goroutine after the two collections", "measured": [{"version": "Go 1.24", "answer": "B", "text": "About a quarter of that size", "quantities": {"kb": 512.32, "r": 0.25}, "estimate": 512.32, "unit": "KB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}, {"id": "R4", "runtime": "go", "family": "stacks", "control": true, "snippets": ["var sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started sync.WaitGroup\nholdDone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo hold8k(&started, holdDone)\n}\nstarted.Wait()\nruntime.GC()\n\nvar idle sync.WaitGroup\ndone := make(chan struct{})\nidle.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tidle.Done()\n\t\t<-done\n\t}()\n}\nidle.Wait()"], "question": "The first batch of goroutines keeps an 8 KB array on the stack and is still alive. How much stack (StackInuse delta) does each goroutine of the second, idle batch start with?", "options": {"A": "About 16 KB", "B": "About 2 KB", "C": "About 8 KB", "D": "About 4 KB"}, "cold": "B", "split": false, "folklore": "B", "mechanism": "Every new goroutine starts with the minimum stack and grows it only when its own frames need more", "why": "Control case: brand-new goroutines still start at the minimum, even after the runtime has seen big stacks.", "metric": "StackInuse", "estimate_what": "starting stack per goroutine of the second batch", "measured": [{"version": "Go 1.24", "answer": "B", "text": "About 2 KB", "quantities": {"q": 2047.34}, "estimate": 2.0, "unit": "KB", "runtime_version": "go1.24.13"}], "models": {"n": 0, "counts": {}, "right": 0}}];
+const KEY = "memtrap-guesses-v1";
+let guesses = {};
+try { guesses = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { guesses = {}; }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(guesses)); } catch (e) {} }
+function el(tag, attrs, text) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function fmtQ(q) { return "r" in q ? "ratio " + q.r + "; " : ""; }
+function tally() {
+  const ids = Object.keys(guesses).filter(id => CASES.some(c => c.id === id));
+  const right = ids.filter(id => guesses[id] === CASES.find(c => c.id === id).cold).length;
+  document.getElementById("right").textContent = right;
+  document.getElementById("done").textContent = ids.length;
+  document.getElementById("left").textContent = (CASES.length - ids.length) + " of " + CASES.length;
+}
+function reveal(card, c, pick) {
+  card.querySelectorAll(".opts button").forEach(b => {
+    b.disabled = true;
+    const k = b.dataset.k;
+    if (k === c.cold) b.classList.add("right");
+    if (k === c.folklore) b.classList.add("folk");
+    if (k === pick) b.classList.add("picked");
+  });
+  const r = card.querySelector(".reveal");
+  r.hidden = false;
+  r.querySelector(".verdict").textContent = pick === c.cold
+    ? "Right. The answer is " + c.cold + "."
+    : "The answer is " + c.cold + ". You picked " + pick + ".";
+}
+function render() {
+  const root = document.getElementById("cases");
+  root.textContent = "";
+  for (const c of CASES) {
+    const card = el("article", {id: c.id});
+    const head = el("div", {class: "head"});
+    head.append(el("span", {class: "id"}, c.id), el("span", {class: "tag " + c.runtime}, c.runtime === "php" ? "PHP " + c.family : "Go " + c.family));
+    if (c.control) head.append(el("span", {class: "control"}, "control case: the rule of thumb holds here"));
+    card.append(head);
+    for (const s of c.snippets) { const pre = el("pre"); pre.append(el("code", {}, s)); card.append(pre); }
+    card.append(el("p", {class: "q"}, c.question));
+    const opts = el("div", {class: "opts", role: "group", "aria-label": "Answer options for " + c.id});
+    for (const [k, t] of Object.entries(c.options)) {
+      const b = el("button", {type: "button", "data-k": k});
+      b.append(el("span", {class: "k"}, k), el("span", {class: "t"}, t));
+      b.addEventListener("click", () => { guesses[c.id] = k; save(); reveal(card, c, k); tally(); });
+      opts.append(b);
+    }
+    card.append(opts);
+    const r = el("div", {class: "reveal", hidden: ""});
+    r.append(el("p", {class: "verdict"}));
+    const ul = el("ul", {class: "measure"});
+    for (const m of c.measured) {
+      const li = el("li");
+      li.append(el("span", {}, m.version + " (" + m.runtime_version + "): "), el("span", {class: "mark"}, m.answer + ". " + m.text));
+      li.append(el("span", {class: "small"}, " " + fmtQ(m.quantities) + c.estimate_what + ": " + m.estimate + " " + m.unit));
+      ul.append(li);
+    }
+    r.append(ul);
+    if (c.split) r.append(el("p", {}, "The versions disagree, so without a version the right answer is " + c.cold + "."));
+    const folk = el("p");
+    if (c.control) folk.append(el("span", {}, "Rule of thumb: " + c.folklore + ". " + c.options[c.folklore] + ". It holds."));
+    else { folk.append(el("span", {}, "Rule of thumb: "), el("span", {class: "rule"}, c.folklore + ". " + c.options[c.folklore])); }
+    r.append(folk);
+    r.append(el("p", {}, "Why: " + c.mechanism + "."));
+    r.append(el("p", {class: "small"}, c.why));
+    const mp = el("p", {class: "small"});
+    if (c.models.n) {
+      const parts = Object.entries(c.models.counts).sort().map(([k, n]) => k + ": " + n);
+      mp.textContent = "Models, cold condition: " + c.models.right + " of " + c.models.n + " picked " + c.cold + " (" + parts.join(", ") + ").";
+    } else {
+      mp.textContent = "Model replies for this case are not in the repository yet.";
+    }
+    r.append(mp);
+    card.append(r);
+    root.append(card);
+    if (guesses[c.id]) reveal(card, c, guesses[c.id]);
+  }
+  tally();
+}
+document.getElementById("reset").addEventListener("click", () => { guesses = {}; save(); render(); });
+render();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # MemoryTrap Bench
 
-Fifteen memory questions about PHP arrays, Go maps and goroutine stacks, asked
+Seventeen memory questions about PHP arrays, Go maps and goroutine stacks, asked
 to language models and scored against numbers measured on pinned runtime
 versions.
 
@@ -30,6 +30,7 @@ rule holds, so a model that bets against every rule loses points there.
 | P4 | `SplFixedArray(1e6)` vs a plain list of 1e6 ints | SplFixedArray takes half as much | PHP 8.1: half as much. PHP 8.3: about the same |
 | P5 | `$b = $a;` then `$b[] = 0;` on a 1e6 list | The assignment copies | PHP 8.3: the assignment adds nothing; the append copies |
 | P6 | int keys vs numeric string keys, 1e6 each | String keys take twice as much | PHP 8.3: about the same |
+| P8 | 1e6 two-element arrays `[$i, $i]`, memory per pair | About 32 bytes per pair | PHP 8.1: about 410 bytes. PHP 8.3: about 230 bytes |
 | G1 | `map[int64]int64` with 1e6 entries, heap per entry | About 16 bytes per entry | Go 1.23 and 1.24: about 40 bytes per entry |
 | G2 | delete every key vs `clear(m)`, then GC | Both give the memory back | Go 1.23 and 1.24: both keep the full size |
 | G3 | `map[int64]struct{}` vs `map[int64]bool` | The set is half the size | Go 1.23: about 10% smaller. Go 1.24: the same |
@@ -39,6 +40,7 @@ rule holds, so a model that bets against every rule loses points there.
 | R2 | 100k goroutines holding an 8 KB local array, stack each | About 10 KB | Go 1.24: about 16 KB |
 | R3 | stack left after `deep(1000)` with 1 KB frames returns, two GCs later | Back to about 2 KB | Go 1.24: a quarter of the peak |
 | R4 (control) | new idle goroutines started after a GC saw 16 KB stacks | About 2 KB | Go 1.24: about 2 KB |
+| R6 | the same idle goroutines, started after the 16 KB goroutines exited | About 2 KB | Go 1.24: about 16 KB |
 
 The exact code, options and mechanisms are in [cases/cases.json](cases/cases.json);
 the measured values for every version are in [cases/truth.json](cases/truth.json).
@@ -69,7 +71,7 @@ with the code only (cold), with the code and the runtime version
 (versioned), and with the version plus one measured fact from another case of
 the same family (evidence). Where the measured answer changes between
 versions, the versioned and evidence tasks ask once per version. That makes
-15, 18 and 18 prompts.
+17, 21 and 21 prompts.
 
 **Scoring.** No LLM judge. The reply is JSON with an answer letter, an
 estimate in MB or KB, a mechanism letter, a confidence and a short reasoning.
@@ -128,7 +130,7 @@ open weights: `gemini-3.5-flash-lite`, `gemini-3.8-flash`,
 
 ## Limits
 
-- Fifteen cases, one run per model and condition.
+- Seventeen cases, one run per model and condition.
 - One machine type per version (GitHub's ubuntu-24.04 runner). Other builds,
   allocators and architectures can give other numbers; the local Go 1.26
   readings on darwin/arm64 are kept as a cross-check.

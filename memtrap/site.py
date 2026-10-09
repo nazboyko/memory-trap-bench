@@ -83,7 +83,7 @@ PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MemoryTrap Bench</title>
-<meta name="description" content="Fifteen memory questions about PHP arrays, Go maps and goroutine stacks. Guess, then see what the runtime measured.">
+<meta name="description" content="Seventeen memory questions about PHP arrays, Go maps and goroutine stacks. Guess, then see what the runtime measured.">
 <style>
 :root {
   color-scheme: light;
@@ -191,7 +191,7 @@ a { color: inherit; }
 <main>
 <header>
 <h1>MemoryTrap Bench</h1>
-<p>Fifteen questions about memory in PHP arrays, Go maps and goroutine stacks. Pick an answer first. Then the page shows what a harness measured on real runtime versions, and which rule of thumb it broke.</p>
+<p>Seventeen questions about memory in PHP arrays, Go maps and goroutine stacks. Pick an answer first. Then the page shows what a harness measured on real runtime versions, and which rule of thumb it broke.</p>
 <p class="small">No runtime version is given in the question, the same way the models saw it in the cold condition. When the measured answer changes between versions, the right answer is the version option. Sizes are binary: 1 MB = 1,048,576 bytes.</p>
 </header>
 <div class="score" aria-live="polite">Your guesses: <strong id="right">0</strong> right of <strong id="done">0</strong> answered, <span id="left"></span> to go. <button id="reset" type="button" class="small" style="font:inherit;background:none;border:0;text-decoration:underline;cursor:pointer;color:inherit">Start over</button></div>

@@ -1,1 +1,1791 @@
-[]
+[
+  {
+    "id": "P1",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "draft",
+    "title": "Packed list versus the same integers inserted in reverse",
+    "snippet_a": "$a = range(1, 1_000_000);",
+    "snippet_b": "$b = [];\nfor ($i = 1_000_000; $i >= 1; $i--) {\n    $b[$i] = $i;\n}",
+    "question": "Both arrays hold the same one million integers. How does the memory taken by $b compare with the memory taken by $a, as reported by memory_get_usage()?",
+    "options": {
+      "A": "About the same",
+      "B": "$b takes about 25% more",
+      "C": "$b takes about 2.5 times as much",
+      "D": "It depends on the PHP version"
+    },
+    "version_option": "D",
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Descending keys keep the array packed; since PHP 8.0 the engine reserves empty slack in front of the first key so inserts at the front stay cheap",
+      "B": "Both arrays are the same kind of hash table underneath; only the order in which the buckets are linked differs, so the sizes match",
+      "C": "Descending keys force the hash layout (keyed buckets plus a hash index); range() builds a packed list, stored as bare values since PHP 8.2",
+      "D": "Integer keys above the initial capacity trigger a rehash, and every rehash widens each bucket so it can hold the larger range of keys"
+    },
+    "correct_mechanism": "C",
+    "folklore_mechanism": "B",
+    "variants": {
+      "a": "memory_get_usage() delta after $a = range(1, 1_000_000)",
+      "b": "memory_get_usage() delta after the reverse loop builds $b"
+    },
+    "decision": {
+      "quantities": {
+        "r": "b / a"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              0.9,
+              1.1
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              1.1,
+              1.6
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              2.0,
+              3.2
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory taken by $b, in MB",
+      "unit": "MB",
+      "expr": "b / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.1",
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P3",
+      "text": "On this runtime, 100,000 arrays with three string keys each measured {b_MB} MB with memory_get_usage()."
+    },
+    "why_it_matters": "A worker that builds a lookup table in reverse order can hit its container memory limit at well under the size the developer planned for.",
+    "folklore_line": "An array with integer keys is an array; the insertion order does not change its size."
+  },
+  {
+    "id": "P2",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "draft",
+    "title": "Unsetting every second element of a packed list",
+    "snippet_a": "$a = range(1, 1_000_000);\nfor ($i = 0; $i < 1_000_000; $i += 2) {\n    unset($a[$i]);\n}",
+    "snippet_b": "",
+    "question": "After the loop removes half of the elements, how does the memory held by $a compare with the memory it held right before the loop, as reported by memory_get_usage()?",
+    "options": {
+      "A": "It drops by about half",
+      "B": "It drops by about a quarter",
+      "C": "It stays about the same",
+      "D": "It grows"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "unset() frees each element's slot right away, so the array shrinks in step with the number of elements it still holds",
+      "B": "The first unset() converts the packed list into a hash table, and the hash layout needs more room per remaining element",
+      "C": "PHP compacts the array during the next garbage collection cycle and hands the freed slots back to the allocator",
+      "D": "unset() only marks each slot as empty; the array keeps its allocation until it is rebuilt or grows"
+    },
+    "correct_mechanism": "D",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "memory_get_usage() delta of $a before the loop",
+      "b": "memory_get_usage() delta of $a after the loop"
+    },
+    "decision": {
+      "quantities": {
+        "r": "b / a"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              0.4,
+              0.62
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              0.62,
+              0.9
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              0.9,
+              1.1
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "r": [
+              1.1,
+              4.0
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory held by $a after the loop, in MB",
+      "unit": "MB",
+      "expr": "b / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.1",
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P3",
+      "text": "On this runtime, 100,000 arrays with three string keys each measured {b_MB} MB with memory_get_usage()."
+    },
+    "why_it_matters": "A long-running consumer that unsets processed items from a big batch array keeps paying for the whole batch until it ends.",
+    "folklore_line": "Unset what you have processed and the memory goes back."
+  },
+  {
+    "id": "P3",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "draft",
+    "title": "Objects with declared properties versus arrays with the same keys",
+    "snippet_a": "final class Point\n{\n    public function __construct(\n        public int $x,\n        public int $y,\n        public int $z,\n    ) {}\n}\n\n$objects = [];\nfor ($i = 0; $i < 100_000; $i++) {\n    $objects[] = new Point($i, $i, $i);\n}",
+    "snippet_b": "$arrays = [];\nfor ($i = 0; $i < 100_000; $i++) {\n    $arrays[] = ['x' => $i, 'y' => $i, 'z' => $i];\n}",
+    "question": "How does the memory taken by $arrays compare with the memory taken by $objects, as reported by memory_get_usage()?",
+    "options": {
+      "A": "$arrays takes about 3 times as much",
+      "B": "About the same",
+      "C": "$arrays takes about 1.5 times as much",
+      "D": "$arrays takes about half as much"
+    },
+    "version_option": null,
+    "folklore_answer": "D",
+    "mechanisms": {
+      "A": "Both store their fields in a hash table keyed by property name, so a three-field object and a three-key array cost the same",
+      "B": "Declared properties sit in a fixed slot table inside each object; each array allocates its own hash table with spare buckets",
+      "C": "Arrays with identical keys share one key table behind the scenes, while every object keeps its own copy of the property names and types",
+      "D": "Each object carries a class pointer, a handler table and a property table on top of its data, so it costs more than a plain array"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "D",
+    "variants": {
+      "a": "memory_get_usage() delta after building $objects",
+      "b": "memory_get_usage() delta after building $arrays"
+    },
+    "decision": {
+      "quantities": {
+        "r": "b / a"
+      },
+      "rules": [
+        {
+          "option": "D",
+          "when": {
+            "r": [
+              0.3,
+              0.75
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              0.75,
+              1.33
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              1.33,
+              2.2
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              2.2,
+              5.0
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory taken by $arrays, in MB",
+      "unit": "MB",
+      "expr": "b / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.1",
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P1",
+      "text": "On this runtime, an array of 1,000,000 integers built by inserting keys from 1,000,000 down to 1 measured {b_MB} MB with memory_get_usage()."
+    },
+    "why_it_matters": "Rows fetched as associative arrays instead of small DTO objects can triple the memory of a batch import.",
+    "folklore_line": "Use plain arrays, objects are heavier."
+  },
+  {
+    "id": "P4",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "draft",
+    "title": "SplFixedArray versus a plain list of integers",
+    "snippet_a": "$fixed = new SplFixedArray(1_000_000);\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $fixed[$i] = $i;\n}",
+    "snippet_b": "$list = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $list[] = $i;\n}",
+    "question": "How does the memory taken by $fixed compare with the memory taken by $list, as reported by memory_get_usage()?",
+    "options": {
+      "A": "$fixed takes about half as much",
+      "B": "About the same",
+      "C": "$fixed takes about a quarter as much",
+      "D": "It depends on the PHP version"
+    },
+    "version_option": "D",
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "SplFixedArray avoids the hash table that every PHP array carries, so for the same values it always uses far less memory",
+      "B": "Since PHP 8.0 SplFixedArray is a regular PHP array wrapped in an object, so both hold the same structure and cost the same",
+      "C": "SplFixedArray stores plain values; a packed list stored keyed buckets before PHP 8.2 and bare values since",
+      "D": "SplFixedArray allocates its whole size up front, while the list grows on demand in small steps and wastes less space overall"
+    },
+    "correct_mechanism": "C",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "memory_get_usage() delta after filling $fixed",
+      "b": "memory_get_usage() delta after filling $list"
+    },
+    "decision": {
+      "quantities": {
+        "r": "a / b"
+      },
+      "rules": [
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              0.15,
+              0.35
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              0.35,
+              0.7
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              0.85,
+              1.15
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory taken by $fixed, in MB",
+      "unit": "MB",
+      "expr": "a / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.1",
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P1",
+      "text": "On this runtime, an array of 1,000,000 integers built by inserting keys from 1,000,000 down to 1 measured {b_MB} MB with memory_get_usage()."
+    },
+    "why_it_matters": "Teams still rewrite hot paths to SplFixedArray for memory; on current PHP that buys almost nothing.",
+    "folklore_line": "Need a big list of numbers? SplFixedArray uses a fraction of the memory."
+  },
+  {
+    "id": "P5",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "draft",
+    "title": "Assignment of a big array, then one append",
+    "snippet_a": "$a = range(1, 1_000_000);\n$b = $a;     // line 2\n$b[] = 0;    // line 3",
+    "snippet_b": "",
+    "question": "How much memory, as reported by memory_get_usage(), does line 2 add, and how much does line 3 add?",
+    "options": {
+      "A": "Line 2 adds a full copy of $a; line 3 adds almost nothing",
+      "B": "Line 2 adds almost nothing; line 3 adds a full copy of $a",
+      "C": "Neither line adds more than a few kilobytes",
+      "D": "Each line adds a full copy of $a"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Assignment copies the array by value right away, and appending then writes into that private copy without further cost",
+      "B": "$b holds a reference to $a after the assignment, so the append writes into the one shared array and both see the new element",
+      "C": "Assignment shares the array and counts references; the first write to $b separates it with a full copy",
+      "D": "PHP copies the array lazily, one bucket at a time, as elements of the new variable are written or appended"
+    },
+    "correct_mechanism": "C",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "memory_get_usage() delta after line 1",
+      "b": "memory_get_usage() delta of line 2",
+      "c": "memory_get_usage() delta of line 3"
+    },
+    "decision": {
+      "quantities": {
+        "r2": "b / a",
+        "r3": "c / a"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "r2": [
+              0.8,
+              1.3
+            ],
+            "r3": [
+              -0.1,
+              0.1
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r2": [
+              -0.1,
+              0.1
+            ],
+            "r3": [
+              0.8,
+              1.3
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r2": [
+              -0.1,
+              0.1
+            ],
+            "r3": [
+              -0.1,
+              0.1
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "r2": [
+              0.8,
+              1.3
+            ],
+            "r3": [
+              0.8,
+              1.3
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory added by line 3, in MB",
+      "unit": "MB",
+      "expr": "c / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P2",
+      "text": "On this runtime, unsetting every second element of a 1,000,000-element list changed memory_get_usage() from {a_MB} MB to {b_MB} MB."
+    },
+    "why_it_matters": "Passing a big array into a function is free until the function writes one element; then the whole array is duplicated.",
+    "folklore_line": "Assigning an array copies it."
+  },
+  {
+    "id": "P6",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "draft",
+    "title": "Integer keys versus numeric string keys",
+    "snippet_a": "$ints = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $ints[$i] = $i;\n}",
+    "snippet_b": "$strings = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $strings[(string) $i] = $i;\n}",
+    "question": "How does the memory taken by $strings compare with the memory taken by $ints, as reported by memory_get_usage()?",
+    "options": {
+      "A": "$strings takes about twice as much",
+      "B": "$strings takes about 30% more",
+      "C": "About the same",
+      "D": "$strings takes noticeably less"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Every string key is stored as its own string object next to the bucket, so a string-keyed array costs more memory than an int-keyed one",
+      "B": "String keys are interned and shared between arrays, so after the first build they cost less than integer keys",
+      "C": "PHP stores both kinds of key in the same bucket structure, so only the hash computation differs between the two arrays",
+      "D": "A string that looks like a decimal integer is converted to an integer key, so both arrays are identical lists"
+    },
+    "correct_mechanism": "D",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "memory_get_usage() delta after building $ints",
+      "b": "memory_get_usage() delta after building $strings"
+    },
+    "decision": {
+      "quantities": {
+        "r": "b / a"
+      },
+      "rules": [
+        {
+          "option": "D",
+          "when": {
+            "r": [
+              0.0,
+              0.9
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              0.9,
+              1.1
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              1.1,
+              1.6
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              1.6,
+              3.0
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory taken by $strings, in MB",
+      "unit": "MB",
+      "expr": "b / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P5",
+      "text": "On this runtime, `$b = $a;` on a 1,000,000-element list added {b_MB} MB according to memory_get_usage()."
+    },
+    "why_it_matters": "IDs that arrive as strings from JSON or a database driver do not make a lookup table any bigger.",
+    "folklore_line": "Cast your keys to int, string keys cost more memory."
+  },
+  {
+    "id": "G1",
+    "runtime": "go",
+    "family": "maps",
+    "control": false,
+    "status": "draft",
+    "title": "Heap held by a map of one million int64 pairs",
+    "snippet_a": "m := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm[i] = i\n}",
+    "snippet_b": "",
+    "question": "After the loop and a runtime.GC(), how much heap does m hold per entry (runtime.MemStats.HeapInuse delta divided by the entry count)?",
+    "options": {
+      "A": "About 16 bytes per entry",
+      "B": "About 24 bytes per entry",
+      "C": "About 38 bytes per entry",
+      "D": "About 64 bytes per entry"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Each entry is a separately allocated node with a next pointer, as in a classic chained hash table, plus the bucket array that points to the nodes",
+      "B": "Entries sit in fixed-size groups with per-slot metadata; the load factor keeps slots partly empty and tables grow in powers of two",
+      "C": "A map stores each key and value back to back in one contiguous array, plus a small fixed header for the length and the hash seed",
+      "D": "The map keeps a second index array with a copy of every key next to the entries, so that lookups can scan keys without touching values"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "C",
+    "variants": {
+      "a": "HeapInuse delta after the loop"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              12,
+              20
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              20,
+              30
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              30,
+              48
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "q": [
+              48,
+              90
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "heap held by m in total, in MB",
+      "unit": "MB",
+      "expr": "a / MB",
+      "metric": "HeapInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.23",
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "G5",
+      "text": "On this runtime, a map[int64][256]byte with 100,000 entries measured {a_MB} MB of HeapInuse."
+    },
+    "why_it_matters": "A cache sized as entries times key-plus-value bytes uses more than twice the heap that was budgeted.",
+    "folklore_line": "An int64 to int64 map costs 16 bytes per entry."
+  },
+  {
+    "id": "G2",
+    "runtime": "go",
+    "family": "maps",
+    "control": false,
+    "status": "draft",
+    "title": "An emptied map: delete every key versus clear()",
+    "snippet_a": "m := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm[i] = i\n}\nfor i := int64(0); i < 1_000_000; i++ {\n\tdelete(m, i)\n}\nruntime.GC()",
+    "snippet_b": "m2 := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm2[i] = i\n}\nclear(m2)\nruntime.GC()",
+    "question": "Both maps are now empty and still referenced. After the runtime.GC() calls, how much heap (HeapInuse) does each one hold compared with the full map?",
+    "options": {
+      "A": "Both give the memory back",
+      "B": "Both keep about the full size",
+      "C": "m keeps about the full size; m2 gives the memory back",
+      "D": "m gives the memory back; m2 keeps about the full size"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Deleted entries and cleared tables become garbage, so the collector frees them on the next cycle and the heap shrinks back",
+      "B": "delete() only marks slots as deleted, while clear() drops the map's tables and starts over with a fresh, empty table",
+      "C": "Neither delete() nor clear() shrinks a map; both reset slots in place and keep the allocated tables",
+      "D": "clear() keeps the tables around for reuse, but delete() lets the map shrink its tables once the last entry is gone"
+    },
+    "correct_mechanism": "C",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "HeapInuse delta of the full map",
+      "b": "HeapInuse delta after deleting every key and runtime.GC()",
+      "c": "HeapInuse delta of the second map after clear() and runtime.GC()"
+    },
+    "decision": {
+      "quantities": {
+        "rd": "b / a",
+        "rc": "c / a"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "rd": [
+              -0.1,
+              0.2
+            ],
+            "rc": [
+              -0.1,
+              0.2
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "rd": [
+              0.8,
+              1.2
+            ],
+            "rc": [
+              0.8,
+              1.2
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "rd": [
+              0.8,
+              1.2
+            ],
+            "rc": [
+              -0.1,
+              0.2
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "rd": [
+              -0.1,
+              0.2
+            ],
+            "rc": [
+              0.8,
+              1.2
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "heap held by m after the deletes, in MB",
+      "unit": "MB",
+      "expr": "b / MB",
+      "metric": "HeapInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.23",
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "G4",
+      "text": "On this runtime, building a map[int64]int64 of 1,000,000 entries from empty allocated {b_total_MB} MB in total (TotalAlloc)."
+    },
+    "why_it_matters": "A long-lived map used as a work queue keeps its peak size for the life of the process, whatever you delete.",
+    "folklore_line": "Delete the keys, or clear() the map, and the memory is freed."
+  },
+  {
+    "id": "G3",
+    "runtime": "go",
+    "family": "maps",
+    "control": false,
+    "status": "draft",
+    "title": "map[int64]struct{} versus map[int64]bool",
+    "snippet_a": "set := make(map[int64]struct{})\nfor i := int64(0); i < 1_000_000; i++ {\n\tset[i] = struct{}{}\n}",
+    "snippet_b": "flags := make(map[int64]bool)\nfor i := int64(0); i < 1_000_000; i++ {\n\tflags[i] = true\n}",
+    "question": "How does the heap held by set compare with the heap held by flags (HeapInuse after runtime.GC())?",
+    "options": {
+      "A": "set is about half the size",
+      "B": "set is about 10% smaller",
+      "C": "About the same",
+      "D": "It depends on the Go version"
+    },
+    "version_option": "D",
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "struct{} takes zero bytes, so set stores only its keys and ends up far smaller than a map that also stores a bool per key",
+      "B": "bool values are packed as single bits inside each group of slots, so the value array of flags is tiny and both maps cost about the same",
+      "C": "Since Go 1.21 the compiler turns map[K]struct{} into a dedicated set type with no value storage, which halves the slot size",
+      "D": "It depends on the slot layout: older maps kept values in a separate array; Swiss-table maps keep key and value in one aligned slot"
+    },
+    "correct_mechanism": "D",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "HeapInuse delta of set",
+      "b": "HeapInuse delta of flags"
+    },
+    "decision": {
+      "quantities": {
+        "r": "a / b"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              0.35,
+              0.7
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              0.8,
+              0.97
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              0.97,
+              1.03
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "heap held by set, in MB",
+      "unit": "MB",
+      "expr": "a / MB",
+      "metric": "HeapInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.23",
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "G1",
+      "text": "On this runtime, a map[int64]int64 with 1,000,000 entries measured {a_MB} MB of HeapInuse."
+    },
+    "why_it_matters": "Code reviews still ask for map[K]struct{} to save memory; the saving depends on the map implementation.",
+    "folklore_line": "Use map[K]struct{} for sets, struct{} takes no memory."
+  },
+  {
+    "id": "G4",
+    "runtime": "go",
+    "family": "maps",
+    "control": true,
+    "status": "draft",
+    "title": "Preallocated map versus a map grown from empty",
+    "snippet_a": "pre := make(map[int64]int64, 1_000_000)\nfor i := int64(0); i < 1_000_000; i++ {\n\tpre[i] = i\n}",
+    "snippet_b": "grown := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tgrown[i] = i\n}",
+    "question": "Compare the total bytes the runtime allocates while each map is built, including memory freed along the way (runtime.MemStats.TotalAlloc delta). How does grown compare with pre?",
+    "options": {
+      "A": "grown allocates about twice as much",
+      "B": "About the same",
+      "C": "grown allocates about 4 times as much",
+      "D": "grown allocates less"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Growing from empty rebuilds the table several times, and every old table becomes garbage",
+      "B": "Both maps end up the same size and Go maps never move entries, so the totals match",
+      "C": "A size hint makes the runtime reserve room for twice the hint, so pre allocates more",
+      "D": "Every growth step keeps the old table alive until the map is collected, so grown holds all of them"
+    },
+    "correct_mechanism": "A",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "HeapInuse delta of pre",
+      "a_total": "TotalAlloc delta while building pre",
+      "b": "HeapInuse delta of grown",
+      "b_total": "TotalAlloc delta while building grown"
+    },
+    "decision": {
+      "quantities": {
+        "r": "b_total / a_total"
+      },
+      "rules": [
+        {
+          "option": "D",
+          "when": {
+            "r": [
+              0.0,
+              0.85
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              0.85,
+              1.2
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              1.6,
+              3.0
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              3.0,
+              6.0
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "total bytes allocated while building grown, in MB",
+      "unit": "MB",
+      "expr": "b_total / MB",
+      "metric": "TotalAlloc",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "G2",
+      "text": "On this runtime, a map[int64]int64 of 1,000,000 entries held {a_MB} MB of HeapInuse when full and {b_MB} MB after every key was deleted."
+    },
+    "why_it_matters": "Control case: the rule of thumb holds, so a model that always bets against folklore loses here.",
+    "folklore_line": "Give make() a size hint and you skip the reallocations."
+  },
+  {
+    "id": "G5",
+    "runtime": "go",
+    "family": "maps",
+    "control": false,
+    "status": "draft",
+    "title": "Map of 256-byte arrays versus map of pointers to them",
+    "snippet_a": "byValue := make(map[int64][256]byte)\nfor i := int64(0); i < 100_000; i++ {\n\tvar v [256]byte\n\tv[0] = byte(i)\n\tbyValue[i] = v\n}",
+    "snippet_b": "byPointer := make(map[int64]*[256]byte)\nfor i := int64(0); i < 100_000; i++ {\n\tv := new([256]byte)\n\tv[0] = byte(i)\n\tbyPointer[i] = v\n}",
+    "question": "Counting the arrays byPointer points to, how does the heap held by byValue compare with byPointer (HeapInuse after runtime.GC())?",
+    "options": {
+      "A": "About the same",
+      "B": "byValue is about 1.5 times larger",
+      "C": "byValue is about 3 times larger",
+      "D": "byValue is smaller"
+    },
+    "version_option": null,
+    "folklore_answer": "C",
+    "mechanisms": {
+      "A": "Every slot of byValue holds a full 256-byte array, empty slots included, so the inline version is far larger than the pointer version",
+      "B": "Values over 128 bytes are not kept in the slot; the map allocates each one separately and stores a pointer, like byPointer",
+      "C": "The compiler rewrites map[K][256]byte into map[K]*[256]byte at compile time, so the two maps are the same type at run time",
+      "D": "byPointer needs an extra heap object header for every array it points to, so it ends up the larger of the two maps"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "HeapInuse delta of byValue",
+      "b": "HeapInuse delta of byPointer, arrays included"
+    },
+    "decision": {
+      "quantities": {
+        "r": "a / b"
+      },
+      "rules": [
+        {
+          "option": "D",
+          "when": {
+            "r": [
+              0.0,
+              0.85
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              0.85,
+              1.2
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              1.2,
+              2.0
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              2.0,
+              5.0
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "heap held by byValue, in MB",
+      "unit": "MB",
+      "expr": "a / MB",
+      "metric": "HeapInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "G1",
+      "text": "On this runtime, a map[int64]int64 with 1,000,000 entries measured {a_MB} MB of HeapInuse."
+    },
+    "why_it_matters": "Switching a map to pointer values to save memory adds GC work and saves nothing for large values.",
+    "folklore_line": "Store pointers in maps when values are big, or the map copies all those bytes."
+  },
+  {
+    "id": "R1",
+    "runtime": "go",
+    "family": "stacks",
+    "control": true,
+    "status": "draft",
+    "title": "Stack of an idle goroutine",
+    "snippet_a": "var started sync.WaitGroup\ndone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tstarted.Done()\n\t\t<-done\n\t}()\n}\nstarted.Wait()",
+    "snippet_b": "",
+    "question": "While all 100,000 goroutines are blocked on the channel, how much stack memory (runtime.MemStats.StackInuse delta) does each one take?",
+    "options": {
+      "A": "About 2 KB",
+      "B": "About 8 KB",
+      "C": "About 256 bytes",
+      "D": "About 4 KB"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Every new goroutine starts with the minimum stack and grows it only when its own frames need more",
+      "B": "Each goroutine gets one OS page for its stack",
+      "C": "Blocked goroutines give their stack back and keep only a small descriptor",
+      "D": "The runtime reserves a fixed 8 KB stack for every goroutine, as threads do with their much larger stacks"
+    },
+    "correct_mechanism": "A",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "StackInuse delta with all goroutines blocked",
+      "a_heap": "HeapInuse delta with all goroutines blocked (descriptors)"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n"
+      },
+      "rules": [
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              0,
+              1024
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              1536,
+              3072
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "q": [
+              3072,
+              6144
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              6144,
+              12288
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "stack per goroutine, in KB",
+      "unit": "KB",
+      "expr": "a / n / KB",
+      "metric": "StackInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "R3",
+      "text": "On this runtime, a goroutine that recursed 1,000 levels deep with a 1 KB frame held a stack of {peak_KB_each} KB right after it returned."
+    },
+    "why_it_matters": "Control case: the 2 KB rule holds for idle goroutines, so a model that always bets against folklore loses here.",
+    "folklore_line": "A goroutine costs about 2 KB of stack."
+  },
+  {
+    "id": "R2",
+    "runtime": "go",
+    "family": "stacks",
+    "control": false,
+    "status": "draft",
+    "title": "Goroutines that hold an 8 KB local array",
+    "snippet_a": "var sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started sync.WaitGroup\ndone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo hold8k(&started, done)\n}\nstarted.Wait()",
+    "snippet_b": "",
+    "question": "While all 100,000 goroutines wait, how much stack memory (StackInuse delta) does each one take?",
+    "options": {
+      "A": "About 10 KB",
+      "B": "About 8 KB",
+      "C": "About 2 KB",
+      "D": "About 16 KB"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Stacks grow by doubling: a frame that does not fit is copied into a stack twice the size, until it fits",
+      "B": "The 8 KB array is moved to the heap, so the stack stays at its starting size",
+      "C": "The runtime adds exactly the missing bytes to the starting stack, so the cost is the start plus the array",
+      "D": "The array replaces the starting stack, so the goroutine takes the size of the array"
+    },
+    "correct_mechanism": "A",
+    "folklore_mechanism": "C",
+    "variants": {
+      "a": "StackInuse delta with all goroutines waiting"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n"
+      },
+      "rules": [
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              0,
+              4096
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              6144,
+              9600
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              9600,
+              13312
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "q": [
+              13312,
+              20480
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "stack per goroutine, in KB",
+      "unit": "KB",
+      "expr": "a / n / KB",
+      "metric": "StackInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "R1",
+      "text": "On this runtime, 100,000 goroutines blocked on a channel with nothing on their stacks took {a_MB} MB of StackInuse."
+    },
+    "why_it_matters": "A worker pool whose handler keeps a modest buffer on the stack costs eight times the 2 KB per goroutine people budget for.",
+    "folklore_line": "A goroutine is 2 KB plus whatever you put on its stack."
+  },
+  {
+    "id": "R3",
+    "runtime": "go",
+    "family": "stacks",
+    "control": false,
+    "status": "draft",
+    "title": "Stack after a deep recursion returns",
+    "snippet_a": "var sink atomic.Int64\n\nfunc deep(n int) byte {\n\tvar pad [1024]byte\n\tpad[n%len(pad)] = byte(n)\n\tif n == 0 {\n\t\treturn pad[0]\n\t}\n\treturn deep(n-1) + pad[n%len(pad)]\n}\n\n// in main, with the collector off (debug.SetGCPercent(-1)):\nvar returned sync.WaitGroup\ndone := make(chan struct{})\nreturned.Add(100)\nfor i := 0; i < 100; i++ {\n\tgo func() {\n\t\tsink.Add(int64(deep(1000)))\n\t\treturned.Done()\n\t\t<-done\n\t}()\n}\nreturned.Wait()\nruntime.GC()\nruntime.GC()",
+    "snippet_b": "",
+    "question": "Each goroutine recursed 1,000 levels deep once, returned and now waits. After the two runtime.GC() calls, how much stack does each goroutine hold compared with its size right after deep() returned (StackInuse)?",
+    "options": {
+      "A": "Back to the starting size of about 2 KB",
+      "B": "Still the full size; goroutine stacks never shrink",
+      "C": "About a quarter of that size",
+      "D": "About half of that size"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "When the deep calls return, the runtime releases the extra stack and the goroutine goes back to its starting stack",
+      "B": "A stack that grew stays at its largest size until the goroutine exits",
+      "C": "Each garbage collection halves a stack that uses less than a quarter of its size, one halving per cycle",
+      "D": "The runtime shrinks stacks on a timer, roughly once per second, independent of garbage collection"
+    },
+    "correct_mechanism": "C",
+    "folklore_mechanism": "A",
+    "variants": {
+      "peak": "StackInuse delta right after deep() returned, before any collection",
+      "gc1": "StackInuse delta after one runtime.GC()",
+      "a": "StackInuse delta after two runtime.GC() calls",
+      "gc4": "StackInuse delta after four runtime.GC() calls"
+    },
+    "decision": {
+      "quantities": {
+        "kb": "a / n / KB",
+        "r": "a / peak"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "kb": [
+              0,
+              8
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "kb": [
+              8,
+              1000000
+            ],
+            "r": [
+              0.15,
+              0.35
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "kb": [
+              8,
+              1000000
+            ],
+            "r": [
+              0.35,
+              0.75
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "kb": [
+              8,
+              1000000
+            ],
+            "r": [
+              0.85,
+              1.15
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "stack held by each goroutine after the two collections, in KB",
+      "unit": "KB",
+      "expr": "a / n / KB",
+      "metric": "StackInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "R2",
+      "text": "On this runtime, 100,000 goroutines that each keep an 8 KB array on the stack took {a_MB} MB of StackInuse."
+    },
+    "why_it_matters": "One deep request handler can keep a large stack for minutes on an idle goroutine, and it shrinks only as fast as the GC runs.",
+    "folklore_line": "Go stacks grow and shrink automatically, so a deep call costs nothing once it returns."
+  },
+  {
+    "id": "R4",
+    "runtime": "go",
+    "family": "stacks",
+    "control": true,
+    "status": "draft",
+    "title": "New goroutines started while big-stack goroutines are alive",
+    "snippet_a": "var sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started sync.WaitGroup\nholdDone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo hold8k(&started, holdDone)\n}\nstarted.Wait()\nruntime.GC()\n\nvar idle sync.WaitGroup\ndone := make(chan struct{})\nidle.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tidle.Done()\n\t\t<-done\n\t}()\n}\nidle.Wait()",
+    "snippet_b": "",
+    "question": "The first batch of goroutines keeps an 8 KB array on the stack and is still alive. How much stack (StackInuse delta) does each goroutine of the second, idle batch start with?",
+    "options": {
+      "A": "About 16 KB",
+      "B": "About 2 KB",
+      "C": "About 8 KB",
+      "D": "About 4 KB"
+    },
+    "version_option": null,
+    "folklore_answer": "B",
+    "mechanisms": {
+      "A": "Since Go 1.19 every new goroutine starts at the average stack size that the last garbage collection observed across all goroutines",
+      "B": "Every new goroutine starts with the minimum stack and grows it only when its own frames need more",
+      "C": "New goroutines inherit the current stack size of the goroutine that starts them, here the main goroutine",
+      "D": "The runtime doubles the starting stack once it has seen many stack growths, and keeps it doubled for later goroutines"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "B",
+    "variants": {
+      "a": "StackInuse delta of the second batch, read without a collection",
+      "a_after_gc": "StackInuse delta of the second batch after one more runtime.GC()"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n"
+      },
+      "rules": [
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              1536,
+              3072
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "q": [
+              3072,
+              6144
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              6144,
+              12288
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              12288,
+              24576
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "starting stack per goroutine of the second batch, in KB",
+      "unit": "KB",
+      "expr": "a / n / KB",
+      "metric": "StackInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "R3",
+      "text": "On this runtime, a goroutine that recursed 1,000 levels deep with a 1 KB frame held a stack of {peak_KB_each} KB right after it returned."
+    },
+    "why_it_matters": "Control case: brand-new goroutines still start at the minimum, even after the runtime has seen big stacks.",
+    "folklore_line": "Every goroutine starts with a 2 KB stack."
+  },
+  {
+    "id": "P7",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "reserve",
+    "title": "Dropping the first half of a list: unset() versus array_slice()",
+    "snippet_a": "$a = range(1, 1_000_000);\nfor ($i = 0; $i < 500_000; $i++) {\n    unset($a[$i]);\n}",
+    "snippet_b": "$b = range(1, 1_000_000);\n$b = array_slice($b, 500_000);",
+    "question": "Both arrays end up with the last 500,000 values. How does the memory held by $a compare with $b, as reported by memory_get_usage()?",
+    "options": {
+      "A": "About the same",
+      "B": "$a holds about twice as much",
+      "C": "$a holds about 4 times as much",
+      "D": "$a holds less"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Both remove the same 500,000 elements, so both arrays shrink to the same size once the elements are gone",
+      "B": "unset() leaves empty slots in the original allocation; array_slice() builds a new list sized for what is left",
+      "C": "array_slice() keeps a reference to the original array and only stores an offset, so $b costs almost nothing",
+      "D": "array_slice() preserves the original keys, so it builds a hash table that costs more than the original packed list did"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "memory_get_usage() delta of $a after the unset loop",
+      "b": "memory_get_usage() delta of $b after array_slice()"
+    },
+    "decision": {
+      "quantities": {
+        "r": "a / b"
+      },
+      "rules": [
+        {
+          "option": "D",
+          "when": {
+            "r": [
+              0.0,
+              0.85
+            ]
+          }
+        },
+        {
+          "option": "A",
+          "when": {
+            "r": [
+              0.85,
+              1.2
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "r": [
+              1.6,
+              2.8
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "r": [
+              2.8,
+              6.0
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory held by $a, in MB",
+      "unit": "MB",
+      "expr": "a / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P3",
+      "text": "On this runtime, 100,000 arrays with three string keys each measured {b_MB} MB with memory_get_usage()."
+    },
+    "why_it_matters": "Trimming a processed prefix with unset() in a loop never returns memory; slicing does.",
+    "folklore_line": "unset() and array_slice() both drop the elements, pick whichever reads better."
+  },
+  {
+    "id": "P8",
+    "runtime": "php",
+    "family": "arrays",
+    "control": false,
+    "status": "reserve",
+    "title": "One million two-element arrays",
+    "snippet_a": "$pairs = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $pairs[] = [$i, $i];\n}",
+    "snippet_b": "",
+    "question": "How much memory does $pairs take, as reported by memory_get_usage()?",
+    "options": {
+      "A": "About 32 MB",
+      "B": "About 100 MB",
+      "C": "About 220 MB",
+      "D": "It depends on the PHP version"
+    },
+    "version_option": "D",
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Two integers of 16 bytes each per pair, plus one 16-byte slot per pair in the outer list, and nothing else",
+      "B": "Each inner array has its own header and a minimum allocation of eight slots, far more than two values",
+      "C": "Small arrays are stored inline in the outer array's slots, so the pairs cost only slightly more than the integers",
+      "D": "PHP shares one inner array between all pairs until one of them is written, so only the outer list costs memory"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "memory_get_usage() delta after building $pairs"
+    },
+    "decision": {
+      "quantities": {
+        "mb": "a / MB"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "mb": [
+              20,
+              50
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "mb": [
+              70,
+              140
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "mb": [
+              160,
+              300
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "memory taken by $pairs, in MB",
+      "unit": "MB",
+      "expr": "a / MB",
+      "metric": "memory_get_usage",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "php-8.1",
+      "php-8.3"
+    ],
+    "evidence": {
+      "from": "P3",
+      "text": "On this runtime, 100,000 arrays with three string keys each measured {b_MB} MB with memory_get_usage()."
+    },
+    "why_it_matters": "Returning rows as small arrays multiplies memory per row far beyond the size of the values.",
+    "folklore_line": "An array of two ints is two ints."
+  },
+  {
+    "id": "R5",
+    "runtime": "go",
+    "family": "stacks",
+    "control": false,
+    "status": "reserve",
+    "title": "A goroutine that called a function with a 64 KB local once",
+    "snippet_a": "var sink atomic.Int64\n\n//go:noinline\nfunc big64k() byte {\n\tvar buf [64 << 10]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\treturn buf[len(buf)-1]\n}\n\n// in main, with the collector off:\nvar ready sync.WaitGroup\ndone := make(chan struct{})\nready.Add(1000)\nfor i := 0; i < 1000; i++ {\n\tgo func() {\n\t\tsink.Add(int64(big64k()))\n\t\tready.Done()\n\t\t<-done\n\t}()\n}\nready.Wait()\nruntime.GC()\nruntime.GC()",
+    "snippet_b": "",
+    "question": "After the two runtime.GC() calls, how much stack (StackInuse delta) does each waiting goroutine hold?",
+    "options": {
+      "A": "About 2 KB",
+      "B": "About 32 KB",
+      "C": "About 128 KB",
+      "D": "About 64 KB"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "The stack goes back to its starting size as soon as the big function returns and its frame is popped",
+      "B": "Each collection halves a mostly unused stack once, starting from the power of two the call needed",
+      "C": "A stack never shrinks once it has grown; it keeps its largest size until the goroutine exits for good",
+      "D": "The 64 KB array was allocated on the heap by escape analysis, so the stack never grew in the first place"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "A",
+    "variants": {
+      "peak": "StackInuse delta right after the call",
+      "a": "StackInuse delta after two runtime.GC() calls"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n / KB"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              0,
+              4
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              24,
+              48
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "q": [
+              48,
+              96
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              96,
+              192
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "stack per goroutine after the collections, in KB",
+      "unit": "KB",
+      "expr": "a / n / KB",
+      "metric": "StackInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "R1",
+      "text": "On this runtime, 100,000 goroutines blocked on a channel with nothing on their stacks took {a_MB} MB of StackInuse."
+    },
+    "why_it_matters": "A single call with a big local buffer leaves its stack behind until the collector has run a few times.",
+    "folklore_line": "The stack is released when the function returns."
+  },
+  {
+    "id": "R6",
+    "runtime": "go",
+    "family": "stacks",
+    "control": false,
+    "status": "reserve",
+    "title": "Idle goroutines started after big-stack goroutines exited",
+    "snippet_a": "var sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started, exited sync.WaitGroup\nholdDone := make(chan struct{})\nstarted.Add(100_000)\nexited.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\thold8k(&started, holdDone)\n\t\texited.Done()\n\t}()\n}\nstarted.Wait()\nruntime.GC()\nclose(holdDone)\nexited.Wait()\n\nvar idle sync.WaitGroup\ndone := make(chan struct{})\nidle.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tidle.Done()\n\t\t<-done\n\t}()\n}\nidle.Wait()",
+    "snippet_b": "",
+    "question": "The first batch has exited. How much stack (StackInuse, compared with before the first batch) does each goroutine of the second, idle batch hold?",
+    "options": {
+      "A": "About 2 KB",
+      "B": "About 16 KB",
+      "C": "About 8 KB",
+      "D": "About 4 KB"
+    },
+    "version_option": null,
+    "folklore_answer": "A",
+    "mechanisms": {
+      "A": "Every new goroutine starts with the minimum stack and grows it only when its own frames need more space",
+      "B": "A goroutine that reuses an exited descriptor gets the starting size computed from the stacks the last GC scanned",
+      "C": "Exited goroutines keep their stacks forever and the new ones get fresh ones, so the second batch adds a full extra set on top",
+      "D": "The runtime caps the starting stack of idle goroutines at half of the largest stack it has seen so far in the process"
+    },
+    "correct_mechanism": "B",
+    "folklore_mechanism": "A",
+    "variants": {
+      "a": "StackInuse delta with the second batch waiting, read without a collection",
+      "a_after_gc": "the same after one runtime.GC()"
+    },
+    "decision": {
+      "quantities": {
+        "q": "a / n"
+      },
+      "rules": [
+        {
+          "option": "A",
+          "when": {
+            "q": [
+              1536,
+              3072
+            ]
+          }
+        },
+        {
+          "option": "D",
+          "when": {
+            "q": [
+              3072,
+              6144
+            ]
+          }
+        },
+        {
+          "option": "C",
+          "when": {
+            "q": [
+              6144,
+              12288
+            ]
+          }
+        },
+        {
+          "option": "B",
+          "when": {
+            "q": [
+              12288,
+              24576
+            ]
+          }
+        }
+      ]
+    },
+    "estimate": {
+      "what": "stack per goroutine of the second batch, in KB",
+      "unit": "KB",
+      "expr": "a / n / KB",
+      "metric": "StackInuse",
+      "tolerance": [
+        0.67,
+        1.5
+      ]
+    },
+    "versions": [
+      "go-1.24"
+    ],
+    "evidence": {
+      "from": "R1",
+      "text": "On this runtime, 100,000 goroutines blocked on a channel with nothing on their stacks took {a_MB} MB of StackInuse."
+    },
+    "why_it_matters": "The same idle goroutine costs 2 KB or 16 KB depending on what ran before it.",
+    "folklore_line": "Every goroutine starts with a 2 KB stack."
+  }
+]

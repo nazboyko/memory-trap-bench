@@ -1,0 +1,139 @@
+{
+    "runtime": "php",
+    "version": "8.2.34",
+    "sapi": "cli",
+    "os": "Linux",
+    "thread_safe": false,
+    "opcache": false,
+    "memory_limit": "2G",
+    "readings": [
+        {
+            "case": "P1",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P1",
+            "variant": "b",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 41943120,
+            "n": 1000000
+        },
+        {
+            "case": "P2",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P2",
+            "variant": "b",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P3",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 12741712,
+            "n": 100000
+        },
+        {
+            "case": "P3",
+            "variant": "b",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 39701328,
+            "n": 100000
+        },
+        {
+            "case": "P4",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16003232,
+            "n": 1000000
+        },
+        {
+            "case": "P4",
+            "variant": "b",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P5",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P5",
+            "variant": "b",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 0,
+            "n": 1000000
+        },
+        {
+            "case": "P5",
+            "variant": "c",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P6",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P6",
+            "variant": "b",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P7",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 16781392,
+            "n": 1000000
+        },
+        {
+            "case": "P7",
+            "variant": "b",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 8392784,
+            "n": 1000000
+        },
+        {
+            "case": "P8",
+            "variant": "a",
+            "metric": "memory_get_usage",
+            "unit": "bytes",
+            "value": 232781392,
+            "n": 1000000
+        }
+    ]
+}

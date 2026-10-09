@@ -1,0 +1,225 @@
+{
+  "runtime": "go",
+  "version": "go1.25.14",
+  "goos": "linux",
+  "goarch": "amd64",
+  "godebug": "",
+  "readings": [
+    {
+      "case": "G1",
+      "variant": "a",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 38199296,
+      "n": 1000000
+    },
+    {
+      "case": "G2",
+      "variant": "a",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 38354944,
+      "n": 1000000
+    },
+    {
+      "case": "G2",
+      "variant": "b",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 38363136,
+      "n": 1000000
+    },
+    {
+      "case": "G2",
+      "variant": "b_later",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 38354944,
+      "n": 1000000
+    },
+    {
+      "case": "G2",
+      "variant": "c",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 37978112,
+      "n": 1000000
+    },
+    {
+      "case": "G2",
+      "variant": "c_later",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 37978112,
+      "n": 1000000
+    },
+    {
+      "case": "G3",
+      "variant": "a",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 38133760,
+      "n": 1000000
+    },
+    {
+      "case": "G3",
+      "variant": "b",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 38133760,
+      "n": 1000000
+    },
+    {
+      "case": "G4",
+      "variant": "a",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 37888000,
+      "n": 1000000
+    },
+    {
+      "case": "G4",
+      "variant": "a_total",
+      "metric": "TotalAlloc",
+      "unit": "bytes",
+      "value": 37832704,
+      "n": 1000000
+    },
+    {
+      "case": "G4",
+      "variant": "b",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 38199296,
+      "n": 1000000
+    },
+    {
+      "case": "G4",
+      "variant": "b_total",
+      "metric": "TotalAlloc",
+      "unit": "bytes",
+      "value": 75370744,
+      "n": 1000000
+    },
+    {
+      "case": "G5",
+      "variant": "a",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 28057600,
+      "n": 100000
+    },
+    {
+      "case": "G5",
+      "variant": "b",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 28049408,
+      "n": 100000
+    },
+    {
+      "case": "R1",
+      "variant": "a",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 204865536,
+      "n": 100000
+    },
+    {
+      "case": "R1",
+      "variant": "a_heap",
+      "metric": "HeapInuse",
+      "unit": "bytes",
+      "value": 56238080,
+      "n": 100000
+    },
+    {
+      "case": "R2",
+      "variant": "a",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 1638432768,
+      "n": 100000
+    },
+    {
+      "case": "R3",
+      "variant": "peak",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 209715200,
+      "n": 100
+    },
+    {
+      "case": "R3",
+      "variant": "gc1",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 104857600,
+      "n": 100
+    },
+    {
+      "case": "R3",
+      "variant": "a",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 52461568,
+      "n": 100
+    },
+    {
+      "case": "R3",
+      "variant": "gc4",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 13139968,
+      "n": 100
+    },
+    {
+      "case": "R4",
+      "variant": "a",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 204767232,
+      "n": 100000
+    },
+    {
+      "case": "R4",
+      "variant": "a_after_gc",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 204767232,
+      "n": 100000
+    },
+    {
+      "case": "R5",
+      "variant": "peak",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 131072000,
+      "n": 1000
+    },
+    {
+      "case": "R5",
+      "variant": "a",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 32833536,
+      "n": 1000
+    },
+    {
+      "case": "R6",
+      "variant": "a",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 1638662144,
+      "n": 100000
+    },
+    {
+      "case": "R6",
+      "variant": "a_after_gc",
+      "metric": "StackInuse",
+      "unit": "bytes",
+      "value": 820641792,
+      "n": 100000
+    }
+  ]
+}

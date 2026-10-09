@@ -1,8 +1,10 @@
 """Validate cases/cases.json, and cases/truth.json when it exists.
 
     uv run python -m memtrap.validate
+    python3 -m memtrap.validate --syntax-only   # snippets only (CI lint step)
 
-Exit code 0 when the catalog is valid, 1 otherwise.
+Exit code 0 when the catalog is valid, 1 otherwise. Only the standard library
+is used, so the CI jobs can run it without installing anything.
 """
 
 from __future__ import annotations
@@ -287,7 +289,13 @@ def validate(cases_path: Path = CASES_PATH, truth_path: Path = TRUTH_PATH, check
     return errs, skipped
 
 
-def main() -> int:
+def main(argv: list[str]) -> int:
+    if "--syntax-only" in argv:
+        errs, skipped = syntax_errors(load_cases())
+        for line in errs:
+            print(f"error: {line}")
+        print(f"syntax: {len(errs)} error(s), {len(skipped)} snippet(s) skipped")
+        return 1 if errs else 0
     errs, skipped = validate()
     cases = load_cases()
     active = active_cases(cases)
@@ -304,4 +312,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

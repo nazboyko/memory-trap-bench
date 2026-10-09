@@ -1,0 +1,21 @@
+[project]
+name = "memory-trap-bench"
+version = "0.1.0"
+description = "Memory questions about PHP arrays, Go maps and goroutine stacks, answered by models and measured on pinned runtimes"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "kaggle-benchmarks>=0.6.1",
+    "matplotlib>=3.11.2",
+    "pandas>=3.0.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

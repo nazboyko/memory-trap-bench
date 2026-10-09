@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.DS_Store
+# local task runs; kept only under results/
+*.run.json
+!results/**/*.run.json

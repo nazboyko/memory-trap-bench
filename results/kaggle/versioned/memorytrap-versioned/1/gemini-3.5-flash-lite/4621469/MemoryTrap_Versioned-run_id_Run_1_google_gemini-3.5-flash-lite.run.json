@@ -1,0 +1,2513 @@
+{
+  "taskVersion": {
+    "versionNumber": 1,
+    "name": "MemoryTrap Versioned",
+    "description": "The MemoryTrap Bench questions with the runtime version added (PHP 8.1 or 8.3, Go 1.23 or 1.24). Cases whose measured answer differs between versions are asked once per version. Scored on answer, estimate and mechanism against measured values.",
+    "definition": "@kbench.task(name='MemoryTrap Versioned', description='The MemoryTrap Bench questions with the runtime version added (PHP 8.1 or 8.3, Go 1.23 or 1.24). Cases whose measured answer differs between versions are asked once per version. Scored on answer, estimate and mechanism against measured values.')\ndef memtrap_versioned(llm) -> float:\n    \"\"\"Mean case score over every item: (answer + estimate + mechanism) / 3.\"\"\"\n    data = pd.DataFrame({\"item_id\": list(ITEMS)}, index=list(ITEMS))\n    runs = memtrap_item.evaluate(llm=[llm], evaluation_data=data, n_jobs=4, on_failure=\"continue\")\n    rows = [r.result for r in runs.completed_runs if isinstance(r.result, dict)]\n    errored = len(ITEMS) - len(rows)\n    summary = summarize(rows)\n    kbench.assertions.assert_true(\n        errored == 0, expectation=f\"every item ran ({errored} of {len(ITEMS)} errored)\"\n    )\n    kbench.assertions.assert_true(\n        summary[\"parse_failures\"] == 0,\n        expectation=f\"every reply parsed ({summary['parse_failures']} parse failures)\",\n    )\n    return float(sum(r[\"case_score\"] for r in rows) / len(ITEMS))\n"
+  },
+  "modelVersion": {
+    "slug": "google/gemini-3.5-flash-lite"
+  },
+  "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+  "startTime": "2026-10-10T01:09:57.371574Z",
+  "endTime": "2026-10-10T01:10:28.222624Z",
+  "conversations": [
+    {
+      "id": "MemoryTrap Versioned-9d732e69",
+      "metrics": {},
+      "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+    }
+  ],
+  "results": [
+    {
+      "type": "AGGREGATED",
+      "numericResult": {
+        "value": 0.42857142857142855
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "expectation": "every item ran (3 of 21 errored)",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+      "lineNumber": 43,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "MemoryTrap Versioned-9d732e69"
+        }
+      ]
+    },
+    {
+      "expectation": "every reply parsed (0 parse failures)",
+      "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+      "lineNumber": 46,
+      "definition": "kbench.assertions.assert_true(",
+      "conversationRequestIds": [
+        {
+          "conversationId": "MemoryTrap Versioned-9d732e69"
+        }
+      ]
+    }
+  ],
+  "subruns": [
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:09:57.408439Z",
+      "endTime": "2026-10-10T01:10:08.905167Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-46f124ab",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$a = range(1, 1_000_000);\n```\n\n```php\n$b = [];\nfor ($i = 1_000_000; $i >= 1; $i--) {\n    $b[$i] = $i;\n}\n```\n\nRuntime: PHP 8.1.x, CLI, NTS, opcache disabled.\n\nQuestion: Both arrays hold the same one million integers. How does the memory taken by $b compare with the memory taken by $a, as reported by memory_get_usage()?\n\nAnswer options:\nA. $b takes about 25% more than $a\nB. $b takes about 2.5x as much\nC. About the same\nD. It depends on the PHP version\n\nWhich explanation best describes the cause?\nA. Descending keys keep the array packed; since PHP 8.0 the engine reserves empty slack in front of the first key so inserts at the front stay cheap\nB. Descending keys force the hash layout (keyed buckets plus a hash index); range() builds a packed list, stored as bare values since PHP 8.2\nC. Integer keys above the initial capacity trigger a rehash, and every rehash widens each bucket so it can hold the larger range of keys\nD. Both arrays are the same kind of hash table underneath; only the order in which the buckets are linked differs, so the sizes match\n\nEstimate: memory taken by $b, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"B\", \"estimate\": 67.0, \"mechanism\": \"B\", \"confidence\": 95, \"reasoning\": \"range() creates a packed array (list) where integers are stored efficiently as a contiguous block of zvals. Building $b in reverse order creates a hash map with 1,000,000 integer keys, requiring a hash index and bucket structures, which uses significantly more memory per element due to PHP's hashtable overhead.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 479,
+                "outputTokens": 109,
+                "inputTokensCostNanodollars": "143700",
+                "outputTokensCostNanodollars": "272500",
+                "totalBackendLatencyMs": "665"
+              },
+              "id": "MemoryTrap Item-46f124ab-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 479,
+            "outputTokens": 109,
+            "inputTokensCostNanodollars": "143700",
+            "outputTokensCostNanodollars": "272500",
+            "totalBackendLatencyMs": "665"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "B",
+            "correct_mechanism": "B",
+            "item": "P1@php-8.1",
+            "estimate_ok": 0.0,
+            "estimate": 67.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              40.0
+            ],
+            "version": "php-8.1",
+            "case_score": 0.3333333333333333,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 0.0,
+            "case": "P1",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "B",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "P1@php-8.1 answer A: $b takes about 25% more than $a",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-46f124ab",
+              "requestId": "MemoryTrap Item-46f124ab-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P1@php-8.1 mechanism B",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-46f124ab",
+              "requestId": "MemoryTrap Item-46f124ab-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P1@php-8.1 estimate within 0.67x-1.5x of the measured 40 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-46f124ab",
+              "requestId": "MemoryTrap Item-46f124ab-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #1"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:08.905568Z",
+      "endTime": "2026-10-10T01:10:09.883691Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-7e57d62b",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$fixed = new SplFixedArray(1_000_000);\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $fixed[$i] = $i;\n}\n```\n\n```php\n$list = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $list[] = $i;\n}\n```\n\nRuntime: PHP 8.1.x, CLI, NTS, opcache disabled.\n\nQuestion: How does the memory taken by $fixed compare with the memory taken by $list, as reported by memory_get_usage()?\n\nAnswer options:\nA. $fixed takes about half as much\nB. About the same\nC. $fixed takes about a quarter as much\nD. It depends on the PHP version\n\nWhich explanation best describes the cause?\nA. Since PHP 8.0 SplFixedArray is a regular PHP array wrapped in an object, so both hold the same structure and cost the same\nB. SplFixedArray avoids the hash table that every PHP array carries, so for the same values it always uses far less memory\nC. Before PHP 8.0 SplFixedArray kept a hash table; since then it allocates its whole size up front, which wastes more than a list that grows on demand\nD. SplFixedArray stores plain values; a packed list stored keyed buckets before PHP 8.2 and has stored bare values since that release\n\nEstimate: memory taken by $fixed, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"A\", \"estimate\": 8, \"mechanism\": \"B\", \"confidence\": 95, \"reasoning\": \"SplFixedArray allocates a continuous C-style array of zvals, completely bypassing the complex hash table overhead that standard PHP arrays require for their bucket structures, hash maps, and linked lists. For 1 million integers, a standard PHP array uses around 32-36 MB, whereas an SplFixedArray uses roughly 8 MB, which is about a quarter (or half, depending on exact zval packing, but commonly cited as roughly 4x less memory).\"}}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 495,
+                "outputTokens": 127,
+                "inputTokensCostNanodollars": "148500",
+                "outputTokensCostNanodollars": "317500",
+                "totalBackendLatencyMs": "810"
+              },
+              "id": "MemoryTrap Item-7e57d62b-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 495,
+            "outputTokens": 127,
+            "inputTokensCostNanodollars": "148500",
+            "outputTokensCostNanodollars": "317500",
+            "totalBackendLatencyMs": "810"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 0.0,
+            "folklore_answer": 0.0,
+            "answer": "A",
+            "correct_mechanism": "D",
+            "item": "P4@php-8.1",
+            "estimate_ok": 0.0,
+            "estimate": 8.0,
+            "confidently_wrong": 0.0,
+            "retried": false,
+            "expected_estimate": [
+              15.26
+            ],
+            "version": "php-8.1",
+            "case_score": 0.3333333333333333,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 1.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 1.0,
+            "case": "P4",
+            "answer_ok": 1.0,
+            "confidence": 95.0,
+            "mechanism": "B",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "P4@php-8.1 answer A: $fixed takes about half as much",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-7e57d62b",
+              "requestId": "MemoryTrap Item-7e57d62b-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P4@php-8.1 mechanism D",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-7e57d62b",
+              "requestId": "MemoryTrap Item-7e57d62b-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P4@php-8.1 estimate within 0.67x-1.5x of the measured 15.26 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-7e57d62b",
+              "requestId": "MemoryTrap Item-7e57d62b-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #5"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:09.883993Z",
+      "endTime": "2026-10-10T01:10:10.749856Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-a744c323",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$fixed = new SplFixedArray(1_000_000);\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $fixed[$i] = $i;\n}\n```\n\n```php\n$list = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $list[] = $i;\n}\n```\n\nRuntime: PHP 8.3.x, CLI, NTS, opcache disabled.\n\nQuestion: How does the memory taken by $fixed compare with the memory taken by $list, as reported by memory_get_usage()?\n\nAnswer options:\nA. $fixed takes about half as much\nB. About the same\nC. $fixed takes about a quarter as much\nD. It depends on the PHP version\n\nWhich explanation best describes the cause?\nA. Since PHP 8.0 SplFixedArray is a regular PHP array wrapped in an object, so both hold the same structure and cost the same\nB. SplFixedArray avoids the hash table that every PHP array carries, so for the same values it always uses far less memory\nC. Before PHP 8.0 SplFixedArray kept a hash table; since then it allocates its whole size up front, which wastes more than a list that grows on demand\nD. SplFixedArray stores plain values; a packed list stored keyed buckets before PHP 8.2 and has stored bare values since that release\n\nEstimate: memory taken by $fixed, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"A\", \"estimate\": 8, \"mechanism\": \"B\", \"confidence\": 90, \"reasoning\": \"An `SplFixedArray` in PHP bypasses the hash table overhead required by standard PHP arrays (`$list`), storing elements contiguously like a C array. For 1 million integer elements, a standard PHP array uses significantly more memory due to hash bucket overhead, while `SplFixedArray` consumes about half as much memory (roughly 8 MB vs 16 MB+).\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 495,
+                "outputTokens": 108,
+                "inputTokensCostNanodollars": "148500",
+                "outputTokensCostNanodollars": "270000",
+                "totalBackendLatencyMs": "704"
+              },
+              "id": "MemoryTrap Item-a744c323-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 495,
+            "outputTokens": 108,
+            "inputTokensCostNanodollars": "148500",
+            "outputTokensCostNanodollars": "270000",
+            "totalBackendLatencyMs": "704"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 0.0,
+            "folklore_answer": 1.0,
+            "answer": "A",
+            "correct_mechanism": "D",
+            "item": "P4@php-8.3",
+            "estimate_ok": 0.0,
+            "estimate": 8.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              15.26
+            ],
+            "version": "php-8.3",
+            "case_score": 0.0,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "B",
+            "folklore_mechanism": 1.0,
+            "case": "P4",
+            "answer_ok": 0.0,
+            "confidence": 90.0,
+            "mechanism": "B",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "P4@php-8.3 answer B: About the same",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a744c323",
+              "requestId": "MemoryTrap Item-a744c323-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P4@php-8.3 mechanism D",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a744c323",
+              "requestId": "MemoryTrap Item-a744c323-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P4@php-8.3 estimate within 0.67x-1.5x of the measured 15.26 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a744c323",
+              "requestId": "MemoryTrap Item-a744c323-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #6"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:10.750279Z",
+      "endTime": "2026-10-10T01:10:11.589869Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-01798af4",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$a = range(1, 1_000_000);\n$b = $a;     // line 2\n$b[] = 0;    // line 3\n```\n\nRuntime: PHP 8.3.x, CLI, NTS, opcache disabled.\n\nQuestion: How much memory, as reported by memory_get_usage(), does line 2 add, and how much does line 3 add?\n\nAnswer options:\nA. Line 2 adds a full copy of $a; line 3 adds almost nothing\nB. Neither line adds more than a few kilobytes\nC. Line 2 adds almost nothing; line 3 adds a full copy of $a\nD. Each line adds a full copy of $a\n\nWhich explanation best describes the cause?\nA. Assignment shares the array and counts references; the first write to $b separates it with a full copy of every element\nB. $b holds a reference to $a after the assignment, so the append writes into the one shared array and both see the new element\nC. PHP copies the array lazily, one bucket at a time, as elements of the new variable are written or appended\nD. Assignment copies the array by value right away, and appending then writes into that private copy without further cost\n\nEstimate: memory added by line 3, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"C\", \"estimate\": 32, \"mechanism\": \"A\", \"confidence\": 100, \"reasoning\": \"PHP uses copy-on-write (COW) for arrays. Line 2 performs an assignment, making `$b` point to the same internal array with almost zero memory overhead. Line 3 modifies `$b`, triggering a separation (COW), which creates a full duplicate of the 1,000,000-element array, consuming roughly 32 MB of additional memory.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 443,
+                "outputTokens": 115,
+                "inputTokensCostNanodollars": "132900",
+                "outputTokensCostNanodollars": "287500",
+                "totalBackendLatencyMs": "663"
+              },
+              "id": "MemoryTrap Item-01798af4-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 443,
+            "outputTokens": 115,
+            "inputTokensCostNanodollars": "132900",
+            "outputTokensCostNanodollars": "287500",
+            "totalBackendLatencyMs": "663"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "C",
+            "correct_mechanism": "A",
+            "item": "P5@php-8.3",
+            "estimate_ok": 0.0,
+            "estimate": 32.0,
+            "confidently_wrong": 0.0,
+            "retried": false,
+            "expected_estimate": [
+              16.0
+            ],
+            "version": "php-8.3",
+            "case_score": 0.6666666666666666,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "C",
+            "folklore_mechanism": 0.0,
+            "case": "P5",
+            "answer_ok": 1.0,
+            "confidence": 100.0,
+            "mechanism": "A",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "P5@php-8.3 answer C: Line 2 adds almost nothing; line 3 adds a full copy of $a",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-01798af4",
+              "requestId": "MemoryTrap Item-01798af4-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P5@php-8.3 mechanism A",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-01798af4",
+              "requestId": "MemoryTrap Item-01798af4-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P5@php-8.3 estimate within 0.67x-1.5x of the measured 16 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-01798af4",
+              "requestId": "MemoryTrap Item-01798af4-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #7"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:11.590173Z",
+      "endTime": "2026-10-10T01:10:12.525903Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-0287c42d",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$ints = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $ints[$i] = $i;\n}\n```\n\n```php\n$strings = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $strings[(string) $i] = $i;\n}\n```\n\nRuntime: PHP 8.3.x, CLI, NTS, opcache disabled.\n\nQuestion: How does the memory taken by $strings compare with the memory taken by $ints, as reported by memory_get_usage()?\n\nAnswer options:\nA. About the same\nB. $strings takes about 30% more\nC. $strings takes about twice as much\nD. $strings takes noticeably less\n\nWhich explanation best describes the cause?\nA. Every string key is stored as its own string object next to the bucket, so a string-keyed array costs more memory than an int-keyed one\nB. A string that looks like a decimal integer is converted to an integer key, so both arrays are identical lists\nC. String keys are interned and shared between arrays, so after the first build they cost less than integer keys\nD. PHP stores both kinds of key in the same bucket structure, so only the hash computation differs between the two arrays\n\nEstimate: memory taken by $strings, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"C\", \"estimate\": 64, \"mechanism\": \"A\", \"confidence\": 95, \"reasoning\": \"PHP arrays store elements in a bucket structure. In `$ints`, keys are integers stored directly inside the bucket without extra memory. In `$strings`, each key `(string) $i` is a full string zval/structure allocated separately on the heap alongside the bucket. This overhead nearly doubles the memory consumption compared to integer-keyed arrays, typically resulting in ~64 MB for 1 million string keys versus ~32 MB for integers.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 466,
+                "outputTokens": 122,
+                "inputTokensCostNanodollars": "139800",
+                "outputTokensCostNanodollars": "305000",
+                "totalBackendLatencyMs": "734"
+              },
+              "id": "MemoryTrap Item-0287c42d-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 466,
+            "outputTokens": 122,
+            "inputTokensCostNanodollars": "139800",
+            "outputTokensCostNanodollars": "305000",
+            "totalBackendLatencyMs": "734"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 0.0,
+            "folklore_answer": 1.0,
+            "answer": "C",
+            "correct_mechanism": "B",
+            "item": "P6@php-8.3",
+            "estimate_ok": 0.0,
+            "estimate": 64.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              16.0
+            ],
+            "version": "php-8.3",
+            "case_score": 0.0,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 1.0,
+            "case": "P6",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "A",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "P6@php-8.3 answer A: About the same",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-0287c42d",
+              "requestId": "MemoryTrap Item-0287c42d-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P6@php-8.3 mechanism B",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-0287c42d",
+              "requestId": "MemoryTrap Item-0287c42d-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P6@php-8.3 estimate within 0.67x-1.5x of the measured 16 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-0287c42d",
+              "requestId": "MemoryTrap Item-0287c42d-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #8"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:12.526236Z",
+      "endTime": "2026-10-10T01:10:13.737402Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-d2edb510",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$pairs = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $pairs[] = [$i, $i];\n}\n```\n\nRuntime: PHP 8.1.x, CLI, NTS, opcache disabled.\n\nQuestion: How much memory does $pairs take per pair, as reported by memory_get_usage() divided by the number of pairs?\n\nAnswer options:\nA. About 230 bytes for every pair\nB. About 32 bytes for every pair\nC. About 410 bytes for every pair\nD. It depends on the PHP version\n\nWhich explanation best describes the cause?\nA. Small arrays are stored inline in the outer array's slots, so the pairs cost only slightly more than the integers\nB. PHP shares one inner array between all pairs until one of them is written, so only the outer list costs memory\nC. Each inner array has its own header and a minimum allocation of eight slots, far more than its two values need\nD. Two integers of 16 bytes each per pair, plus one 16-byte slot per pair in the outer list, and nothing else\n\nEstimate: memory taken by $pairs in total, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"A\", \"estimate\": 220, \"mechanism\": \"C\", \"confidence\": 95, \"reasoning\": \"In PHP 8.1, each inner array allocates a bucket array of size 8 (minimum power of two >= 2) plus its zval overhead and bucket structures. This results in roughly 230 bytes per pair on 64-bit systems. For 1,000,000 pairs, the total memory is around 220 to 230 MB.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 427,
+                "outputTokens": 117,
+                "inputTokensCostNanodollars": "128100",
+                "outputTokensCostNanodollars": "292500",
+                "totalBackendLatencyMs": "1028"
+              },
+              "id": "MemoryTrap Item-d2edb510-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 427,
+            "outputTokens": 117,
+            "inputTokensCostNanodollars": "128100",
+            "outputTokensCostNanodollars": "292500",
+            "totalBackendLatencyMs": "1028"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "A",
+            "correct_mechanism": "C",
+            "item": "P8@php-8.1",
+            "estimate_ok": 0.0,
+            "estimate": 220.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              390.59
+            ],
+            "version": "php-8.1",
+            "case_score": 0.3333333333333333,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "C",
+            "folklore_mechanism": 0.0,
+            "case": "P8",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "C",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "P8@php-8.1 answer C: About 410 bytes for every pair",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-d2edb510",
+              "requestId": "MemoryTrap Item-d2edb510-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P8@php-8.1 mechanism C",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-d2edb510",
+              "requestId": "MemoryTrap Item-d2edb510-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P8@php-8.1 estimate within 0.67x-1.5x of the measured 390.59 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-d2edb510",
+              "requestId": "MemoryTrap Item-d2edb510-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #9"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:13.737716Z",
+      "endTime": "2026-10-10T01:10:14.642071Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-23bc630d",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$pairs = [];\nfor ($i = 0; $i < 1_000_000; $i++) {\n    $pairs[] = [$i, $i];\n}\n```\n\nRuntime: PHP 8.3.x, CLI, NTS, opcache disabled.\n\nQuestion: How much memory does $pairs take per pair, as reported by memory_get_usage() divided by the number of pairs?\n\nAnswer options:\nA. About 230 bytes for every pair\nB. About 32 bytes for every pair\nC. About 410 bytes for every pair\nD. It depends on the PHP version\n\nWhich explanation best describes the cause?\nA. Small arrays are stored inline in the outer array's slots, so the pairs cost only slightly more than the integers\nB. PHP shares one inner array between all pairs until one of them is written, so only the outer list costs memory\nC. Each inner array has its own header and a minimum allocation of eight slots, far more than its two values need\nD. Two integers of 16 bytes each per pair, plus one 16-byte slot per pair in the outer list, and nothing else\n\nEstimate: memory taken by $pairs in total, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"A\", \"estimate\": 220, \"mechanism\": \"C\", \"confidence\": 90, \"reasoning\": \"In PHP 8.3, an array overhead is around 32 bytes for the bucket and zend_array, but small arrays have a minimum hash table size (typically 8 buckets), plus zval containers. This results in roughly 230 bytes per inner pair when scaled over 1,000,000 elements, leading to a total memory footprint of approximately 220 MB.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 427,
+                "outputTokens": 124,
+                "inputTokensCostNanodollars": "128100",
+                "outputTokensCostNanodollars": "310000",
+                "totalBackendLatencyMs": "735"
+              },
+              "id": "MemoryTrap Item-23bc630d-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 427,
+            "outputTokens": 124,
+            "inputTokensCostNanodollars": "128100",
+            "outputTokensCostNanodollars": "310000",
+            "totalBackendLatencyMs": "735"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "A",
+            "correct_mechanism": "C",
+            "item": "P8@php-8.3",
+            "estimate_ok": 1.0,
+            "estimate": 220.0,
+            "confidently_wrong": 0.0,
+            "retried": false,
+            "expected_estimate": [
+              222.0
+            ],
+            "version": "php-8.3",
+            "case_score": 1.0,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 0.0,
+            "case": "P8",
+            "answer_ok": 1.0,
+            "confidence": 90.0,
+            "mechanism": "C",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "P8@php-8.3 answer A: About 230 bytes for every pair",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-23bc630d",
+              "requestId": "MemoryTrap Item-23bc630d-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P8@php-8.3 mechanism C",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-23bc630d",
+              "requestId": "MemoryTrap Item-23bc630d-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "P8@php-8.3 estimate within 0.67x-1.5x of the measured 222 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-23bc630d",
+              "requestId": "MemoryTrap Item-23bc630d-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #10"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:14.642421Z",
+      "endTime": "2026-10-10T01:10:15.668378Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-a359326a",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nm := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm[i] = i\n}\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: After the loop and a runtime.GC(), how much heap does m hold per entry (runtime.MemStats.HeapInuse delta divided by the entry count)?\n\nAnswer options:\nA. About 24 bytes per entry\nB. About 16 bytes per entry\nC. About 40 bytes per entry\nD. About 64 bytes per entry\n\nWhich explanation best describes the cause?\nA. Entries sit in fixed-size groups with per-slot metadata; the load factor keeps slots partly empty and tables grow in powers of two\nB. A map stores each key and value back to back in one contiguous array, plus a small fixed header for the length and the hash seed\nC. Each entry is a separately allocated node with a next pointer, as in a classic chained hash table, plus the bucket array that points to the nodes\nD. The map keeps a second index array with a copy of every key next to the entries, so that lookups can scan keys without touching values\n\nEstimate: heap held by m in total, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"A\", \"estimate\": 41, \"mechanism\": \"A\", \"confidence\": 95, \"reasoning\": \"Go maps use buckets holding 8 keys and 8 values with top-hash bytes. With 1 million entries, the map allocates buckets (powers of two) and overhead, resulting in about 41-43 bytes per entry after GC. Explanation A correctly describes Go's SwissTable/bucket-based map layout with load factors and power-of-two growth.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 448,
+                "outputTokens": 114,
+                "inputTokensCostNanodollars": "134400",
+                "outputTokensCostNanodollars": "285000",
+                "totalBackendLatencyMs": "853"
+              },
+              "id": "MemoryTrap Item-a359326a-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 448,
+            "outputTokens": 114,
+            "inputTokensCostNanodollars": "134400",
+            "outputTokensCostNanodollars": "285000",
+            "totalBackendLatencyMs": "853"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "A",
+            "correct_mechanism": "A",
+            "item": "G1@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 41.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              36.36
+            ],
+            "version": "go-1.24",
+            "case_score": 0.6666666666666666,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "C",
+            "folklore_mechanism": 0.0,
+            "case": "G1",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "A",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "G1@go-1.24 answer C: About 40 bytes per entry",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a359326a",
+              "requestId": "MemoryTrap Item-a359326a-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G1@go-1.24 mechanism A",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a359326a",
+              "requestId": "MemoryTrap Item-a359326a-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G1@go-1.24 estimate within 0.67x-1.5x of the measured 36.36 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a359326a",
+              "requestId": "MemoryTrap Item-a359326a-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #11"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:15.668815Z",
+      "endTime": "2026-10-10T01:10:16.711553Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-a1417caf",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nm := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm[i] = i\n}\nfor i := int64(0); i < 1_000_000; i++ {\n\tdelete(m, i)\n}\nruntime.GC()\n```\n\n```go\nm2 := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tm2[i] = i\n}\nclear(m2)\nruntime.GC()\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: Both maps are now empty and still referenced. After the runtime.GC() calls, how much heap (HeapInuse) does each one hold compared with the full map?\n\nAnswer options:\nA. Both keep about the full size\nB. m keeps about the full size; m2 gives the memory back\nC. Both give the memory back\nD. m gives the memory back; m2 keeps about the full size\n\nWhich explanation best describes the cause?\nA. delete() only marks slots as deleted, while clear() drops the map's tables and starts over with a fresh, empty table\nB. Neither delete() nor clear() shrinks a map; both reset the slots in place and keep every table the map has allocated\nC. Deleted entries and cleared tables become garbage, so the collector frees them on the next cycle and the heap shrinks back\nD. clear() keeps the tables around for reuse, but delete() lets the map shrink its tables once the last entry is gone\n\nEstimate: heap held by m after the deletes, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"A\", \"estimate\": 32, \"mechanism\": \"B\", \"confidence\": 100, \"reasoning\": \"Go maps never shrink their allocated memory buckets on their own, regardless of whether you use `delete()` for all entries or `clear()` (introduced in Go 1.21). Both operations reset the keys/values in place or clear the slots, but the underlying bucket arrays and overflow tables remain allocated in the heap. Therefore, both maps retain approximately their peak memory usage after `runtime.GC()`.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 555,
+                "outputTokens": 120,
+                "inputTokensCostNanodollars": "166500",
+                "outputTokensCostNanodollars": "300000",
+                "totalBackendLatencyMs": "861"
+              },
+              "id": "MemoryTrap Item-a1417caf-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 555,
+            "outputTokens": 120,
+            "inputTokensCostNanodollars": "166500",
+            "outputTokensCostNanodollars": "300000",
+            "totalBackendLatencyMs": "861"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "A",
+            "correct_mechanism": "B",
+            "item": "G2@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 32.0,
+            "confidently_wrong": 0.0,
+            "retried": false,
+            "expected_estimate": [
+              36.38
+            ],
+            "version": "go-1.24",
+            "case_score": 1.0,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 0.0,
+            "case": "G2",
+            "answer_ok": 1.0,
+            "confidence": 100.0,
+            "mechanism": "B",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "G2@go-1.24 answer A: Both keep about the full size",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a1417caf",
+              "requestId": "MemoryTrap Item-a1417caf-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G2@go-1.24 mechanism B",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a1417caf",
+              "requestId": "MemoryTrap Item-a1417caf-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G2@go-1.24 estimate within 0.67x-1.5x of the measured 36.38 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-a1417caf",
+              "requestId": "MemoryTrap Item-a1417caf-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #12"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:16.711888Z",
+      "endTime": "2026-10-10T01:10:17.665523Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-26111d00",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nset := make(map[int64]struct{})\nfor i := int64(0); i < 1_000_000; i++ {\n\tset[i] = struct{}{}\n}\n```\n\n```go\nflags := make(map[int64]bool)\nfor i := int64(0); i < 1_000_000; i++ {\n\tflags[i] = true\n}\n```\n\nRuntime: Go 1.23.x, linux/amd64.\n\nQuestion: How does the heap held by set compare with the heap held by flags (HeapInuse after runtime.GC())?\n\nAnswer options:\nA. set is about 10% smaller\nB. set is about half the size of flags\nC. About the same\nD. It depends on the Go version\n\nWhich explanation best describes the cause?\nA. struct{} takes zero bytes, so set stores only its keys and ends up far smaller than a map that also stores a bool per key\nB. bool values are packed as single bits inside each group of slots, so the value array of flags is tiny and both maps cost about the same\nC. The slot layout decides it: older maps kept values in a separate array; Swiss-table maps keep key and value in one aligned slot\nD. Since Go 1.21 the compiler turns map[K]struct{} into a dedicated set type with no value storage, which halves the slot size\n\nEstimate: heap held by set, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"C\", \"estimate\": 32, \"mechanism\": \"C\", \"confidence\": 95, \"reasoning\": \"Go 1.24 (and 1.24 generics) still uses Swiss tables internally or similar memory layouts where key and value sizes are padded to alignment, meaning an 8-byte int64 key plus either a 0-byte struct{} or 1-byte bool (padded to 8) occupy identical slot widths. Thus memory usage is nearly identical.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 490,
+                "outputTokens": 114,
+                "inputTokensCostNanodollars": "147000",
+                "outputTokensCostNanodollars": "285000",
+                "totalBackendLatencyMs": "788"
+              },
+              "id": "MemoryTrap Item-26111d00-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 490,
+            "outputTokens": 114,
+            "inputTokensCostNanodollars": "147000",
+            "outputTokensCostNanodollars": "285000",
+            "totalBackendLatencyMs": "788"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "C",
+            "correct_mechanism": "C",
+            "item": "G3@go-1.23",
+            "estimate_ok": 0.0,
+            "estimate": 32.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              21.3
+            ],
+            "version": "go-1.23",
+            "case_score": 0.3333333333333333,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 0.0,
+            "case": "G3",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "C",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "G3@go-1.23 answer A: set is about 10% smaller",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-26111d00",
+              "requestId": "MemoryTrap Item-26111d00-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G3@go-1.23 mechanism C",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-26111d00",
+              "requestId": "MemoryTrap Item-26111d00-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G3@go-1.23 estimate within 0.67x-1.5x of the measured 21.3 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-26111d00",
+              "requestId": "MemoryTrap Item-26111d00-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #13"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:17.665830Z",
+      "endTime": "2026-10-10T01:10:18.736566Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-f8312106",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nset := make(map[int64]struct{})\nfor i := int64(0); i < 1_000_000; i++ {\n\tset[i] = struct{}{}\n}\n```\n\n```go\nflags := make(map[int64]bool)\nfor i := int64(0); i < 1_000_000; i++ {\n\tflags[i] = true\n}\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: How does the heap held by set compare with the heap held by flags (HeapInuse after runtime.GC())?\n\nAnswer options:\nA. set is about 10% smaller\nB. set is about half the size of flags\nC. About the same\nD. It depends on the Go version\n\nWhich explanation best describes the cause?\nA. struct{} takes zero bytes, so set stores only its keys and ends up far smaller than a map that also stores a bool per key\nB. bool values are packed as single bits inside each group of slots, so the value array of flags is tiny and both maps cost about the same\nC. The slot layout decides it: older maps kept values in a separate array; Swiss-table maps keep key and value in one aligned slot\nD. Since Go 1.21 the compiler turns map[K]struct{} into a dedicated set type with no value storage, which halves the slot size\n\nEstimate: heap held by set, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"B\", \"estimate\": 34, \"mechanism\": \"C\", \"confidence\": 95, \"reasoning\": \"Go 1.24 uses Swiss tables where key and value are stored together in grouped slots with byte-aligned padding. Even though struct{} takes zero bytes conceptually, map alignment rules and control bytes mean the slot size for int64 keys is dominated by the key and metadata. However, historically and structurally, map[K]bool stores an extra byte/bool per entry compared to map[K]struct{}, nearly halving the value-storage overhead.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 490,
+                "outputTokens": 125,
+                "inputTokensCostNanodollars": "147000",
+                "outputTokensCostNanodollars": "312500",
+                "totalBackendLatencyMs": "897"
+              },
+              "id": "MemoryTrap Item-f8312106-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 490,
+            "outputTokens": 125,
+            "inputTokensCostNanodollars": "147000",
+            "outputTokensCostNanodollars": "312500",
+            "totalBackendLatencyMs": "897"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 1.0,
+            "answer": "B",
+            "correct_mechanism": "C",
+            "item": "G3@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 34.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              36.37
+            ],
+            "version": "go-1.24",
+            "case_score": 0.6666666666666666,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "C",
+            "folklore_mechanism": 0.0,
+            "case": "G3",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "C",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "G3@go-1.24 answer C: About the same",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-f8312106",
+              "requestId": "MemoryTrap Item-f8312106-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G3@go-1.24 mechanism C",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-f8312106",
+              "requestId": "MemoryTrap Item-f8312106-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G3@go-1.24 estimate within 0.67x-1.5x of the measured 36.37 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-f8312106",
+              "requestId": "MemoryTrap Item-f8312106-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #14"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:18.736885Z",
+      "endTime": "2026-10-10T01:10:19.678703Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-1ca4c586",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\npre := make(map[int64]int64, 1_000_000)\nfor i := int64(0); i < 1_000_000; i++ {\n\tpre[i] = i\n}\n```\n\n```go\ngrown := make(map[int64]int64)\nfor i := int64(0); i < 1_000_000; i++ {\n\tgrown[i] = i\n}\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: Compare the total bytes the runtime allocates while each map is built, including memory freed along the way (runtime.MemStats.TotalAlloc delta). How does grown compare with pre?\n\nAnswer options:\nA. grown allocates about twice as much\nB. About the same\nC. grown allocates about 4 times as much\nD. grown allocates less\n\nWhich explanation best describes the cause?\nA. Both maps end up the same size and Go maps never move entries, so the totals match\nB. Growing from empty rebuilds the table several times, and every old table becomes garbage\nC. A size hint makes the runtime reserve room for twice the hint, so pre allocates more\nD. Every growth step keeps the old table alive until the map is collected, so grown holds all of them\n\nEstimate: total bytes allocated while building grown, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"C\", \"estimate\": 64, \"mechanism\": \"B\", \"confidence\": 95, \"reasoning\": \"Without a capacity hint, the Go map grows exponentially by reallocating and rehashing. Each growth abandons the old backing store, generating garbage. The geometric series of allocations sums to roughly 4 times the final size. With a hint (`pre`), the map allocates its final capacity directly, avoiding intermediate garbage allocations.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 470,
+                "outputTokens": 96,
+                "inputTokensCostNanodollars": "141000",
+                "outputTokensCostNanodollars": "240000",
+                "totalBackendLatencyMs": "763"
+              },
+              "id": "MemoryTrap Item-1ca4c586-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 470,
+            "outputTokens": 96,
+            "inputTokensCostNanodollars": "141000",
+            "outputTokensCostNanodollars": "240000",
+            "totalBackendLatencyMs": "763"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "C",
+            "correct_mechanism": "B",
+            "item": "G4@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 64.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              71.88
+            ],
+            "version": "go-1.24",
+            "case_score": 0.6666666666666666,
+            "parse_failure": false,
+            "control": true,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 0.0,
+            "case": "G4",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "B",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "G4@go-1.24 answer A: grown allocates about twice as much",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-1ca4c586",
+              "requestId": "MemoryTrap Item-1ca4c586-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G4@go-1.24 mechanism B",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-1ca4c586",
+              "requestId": "MemoryTrap Item-1ca4c586-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G4@go-1.24 estimate within 0.67x-1.5x of the measured 71.88 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-1ca4c586",
+              "requestId": "MemoryTrap Item-1ca4c586-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #15"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:19.679046Z",
+      "endTime": "2026-10-10T01:10:20.548196Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-d3f8bd33",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nbyValue := make(map[int64][256]byte)\nfor i := int64(0); i < 100_000; i++ {\n\tvar v [256]byte\n\tv[0] = byte(i)\n\tbyValue[i] = v\n}\n```\n\n```go\nbyPointer := make(map[int64]*[256]byte)\nfor i := int64(0); i < 100_000; i++ {\n\tv := new([256]byte)\n\tv[0] = byte(i)\n\tbyPointer[i] = v\n}\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: Counting the arrays byPointer points to, how does the heap held by byValue compare with byPointer (HeapInuse after runtime.GC())?\n\nAnswer options:\nA. byValue is about 1.5 times larger\nB. About the same\nC. byValue is smaller\nD. byValue is about 3 times larger\n\nWhich explanation best describes the cause?\nA. The compiler rewrites map[K][256]byte into map[K]*[256]byte at compile time, so the two maps are the same type at run time\nB. Every slot of byValue holds a full 256-byte array, empty slots included, so the inline version is far larger than the pointer version\nC. byPointer needs an extra heap object header for every array it points to, so it ends up the larger of the two maps\nD. Values over 128 bytes are not kept in the slot; the map allocates each one separately and stores a pointer, like byPointer\n\nEstimate: heap held by byValue, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"C\", \"estimate\": 25, \"mechanism\": \"C\", \"confidence\": 95, \"reasoning\": \"In Go, map values whose size exceeds 128 bytes (like [256]byte) are stored indirectly on the heap, similar to pointers. Therefore, `byValue` incurs similar underlying array allocations as `byPointer`, but `byPointer` also has to store 8-byte pointers in the map and incurs extra heap object headers/overhead for each `new` allocation, making `byPointer` slightly larger.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 558,
+                "outputTokens": 126,
+                "inputTokensCostNanodollars": "167400",
+                "outputTokensCostNanodollars": "315000",
+                "totalBackendLatencyMs": "714"
+              },
+              "id": "MemoryTrap Item-d3f8bd33-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 558,
+            "outputTokens": 126,
+            "inputTokensCostNanodollars": "167400",
+            "outputTokensCostNanodollars": "315000",
+            "totalBackendLatencyMs": "714"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 0.0,
+            "folklore_answer": 0.0,
+            "answer": "C",
+            "correct_mechanism": "D",
+            "item": "G5@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 25.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              26.75
+            ],
+            "version": "go-1.24",
+            "case_score": 0.3333333333333333,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "B",
+            "folklore_mechanism": 0.0,
+            "case": "G5",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "C",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "G5@go-1.24 answer B: About the same",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-d3f8bd33",
+              "requestId": "MemoryTrap Item-d3f8bd33-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G5@go-1.24 mechanism D",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-d3f8bd33",
+              "requestId": "MemoryTrap Item-d3f8bd33-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "G5@go-1.24 estimate within 0.67x-1.5x of the measured 26.75 MB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-d3f8bd33",
+              "requestId": "MemoryTrap Item-d3f8bd33-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #16"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:20.548568Z",
+      "endTime": "2026-10-10T01:10:21.482438Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-ff84c4db",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nvar started sync.WaitGroup\ndone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tstarted.Done()\n\t\t<-done\n\t}()\n}\nstarted.Wait()\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: While all 100,000 goroutines are blocked on the channel, how much stack memory (runtime.MemStats.StackInuse delta) does each one take?\n\nAnswer options:\nA. About 8 KB\nB. About 256 bytes\nC. About 2 KB\nD. About 4 KB\n\nWhich explanation best describes the cause?\nA. Each goroutine gets one OS page for its stack\nB. Blocked goroutines give their stack back and keep only a small descriptor\nC. The runtime reserves a fixed 8 KB stack for every goroutine, as threads do with their much larger stacks\nD. Every new goroutine starts with the minimum stack and grows it only when its own frames need more\n\nEstimate: stack per goroutine, in KB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in KB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"C\", \"estimate\": 2, \"mechanism\": \"D\", \"confidence\": 95, \"reasoning\": \"Go goroutines start with a minimum stack size. Historically 2 KB (or 2048 bytes). When created and immediately blocked, they retain this initial minimum allocation (2 KB) rather than the older 8 KB or an OS page, growing dynamically only as needed. Thus, StackInuse per blocked goroutine reflects this 2 KB starting size.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 418,
+                "outputTokens": 105,
+                "inputTokensCostNanodollars": "125400",
+                "outputTokensCostNanodollars": "262500",
+                "totalBackendLatencyMs": "750"
+              },
+              "id": "MemoryTrap Item-ff84c4db-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 418,
+            "outputTokens": 105,
+            "inputTokensCostNanodollars": "125400",
+            "outputTokensCostNanodollars": "262500",
+            "totalBackendLatencyMs": "750"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "C",
+            "correct_mechanism": "D",
+            "item": "R1@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 2.0,
+            "confidently_wrong": 0.0,
+            "retried": false,
+            "expected_estimate": [
+              2.0
+            ],
+            "version": "go-1.24",
+            "case_score": 1.0,
+            "parse_failure": false,
+            "control": true,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "C",
+            "folklore_mechanism": 0.0,
+            "case": "R1",
+            "answer_ok": 1.0,
+            "confidence": 95.0,
+            "mechanism": "D",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "R1@go-1.24 answer C: About 2 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-ff84c4db",
+              "requestId": "MemoryTrap Item-ff84c4db-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R1@go-1.24 mechanism D",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-ff84c4db",
+              "requestId": "MemoryTrap Item-ff84c4db-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R1@go-1.24 estimate within 0.67x-1.5x of the measured 2 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-ff84c4db",
+              "requestId": "MemoryTrap Item-ff84c4db-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #17"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:21.482768Z",
+      "endTime": "2026-10-10T01:10:22.305961Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-66c49e18",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nvar sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started sync.WaitGroup\ndone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo hold8k(&started, done)\n}\nstarted.Wait()\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: While all 100,000 goroutines wait, how much stack memory (StackInuse delta) does each one take?\n\nAnswer options:\nA. About 8 KB\nB. About 2 KB\nC. About 16 KB\nD. About 10 KB\n\nWhich explanation best describes the cause?\nA. Stacks grow by doubling: a frame that does not fit is copied into a stack twice the size, until it fits\nB. The 8 KB array is moved to the heap, so the stack stays at its starting size\nC. The runtime adds exactly the missing bytes to the starting stack, so the cost is the start plus the array\nD. The array replaces the starting stack, so the goroutine takes the size of the array\n\nEstimate: stack per goroutine, in KB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in KB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"C\", \"estimate\": 16, \"mechanism\": \"A\", \"confidence\": 100, \"reasoning\": \"Go goroutines start with a 2 KB stack. The function allocates an 8 KB array on the stack, which exceeds the remaining space. Go stacks grow by doubling (2 KB -> 4 KB -> 8 KB -> 16 KB) until the new frame fits. Thus, each waiting goroutine uses a 16 KB stack.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 511,
+                "outputTokens": 109,
+                "inputTokensCostNanodollars": "153300",
+                "outputTokensCostNanodollars": "272500",
+                "totalBackendLatencyMs": "640"
+              },
+              "id": "MemoryTrap Item-66c49e18-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 511,
+            "outputTokens": 109,
+            "inputTokensCostNanodollars": "153300",
+            "outputTokensCostNanodollars": "272500",
+            "totalBackendLatencyMs": "640"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 0.0,
+            "answer": "C",
+            "correct_mechanism": "A",
+            "item": "R2@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 16.0,
+            "confidently_wrong": 0.0,
+            "retried": false,
+            "expected_estimate": [
+              16.0
+            ],
+            "version": "go-1.24",
+            "case_score": 1.0,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "C",
+            "folklore_mechanism": 0.0,
+            "case": "R2",
+            "answer_ok": 1.0,
+            "confidence": 100.0,
+            "mechanism": "A",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "R2@go-1.24 answer C: About 16 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-66c49e18",
+              "requestId": "MemoryTrap Item-66c49e18-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R2@go-1.24 mechanism A",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-66c49e18",
+              "requestId": "MemoryTrap Item-66c49e18-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R2@go-1.24 estimate within 0.67x-1.5x of the measured 16 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-66c49e18",
+              "requestId": "MemoryTrap Item-66c49e18-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #18"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:22.306294Z",
+      "endTime": "2026-10-10T01:10:23.224583Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-3fbd03be",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nvar sink atomic.Int64\n\nfunc deep(n int) byte {\n\tvar pad [1024]byte\n\tpad[n%len(pad)] = byte(n)\n\tif n == 0 {\n\t\treturn pad[0]\n\t}\n\treturn deep(n-1) + pad[n%len(pad)]\n}\n\n// in main, with the collector off (debug.SetGCPercent(-1)):\nvar returned sync.WaitGroup\ndone := make(chan struct{})\nreturned.Add(100)\nfor i := 0; i < 100; i++ {\n\tgo func() {\n\t\tsink.Add(int64(deep(1000)))\n\t\treturned.Done()\n\t\t<-done\n\t}()\n}\nreturned.Wait()\nruntime.GC()\nruntime.GC()\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: Each goroutine recursed 1,000 levels deep once, returned and now waits. After the two runtime.GC() calls, how much stack does each goroutine hold compared with its size right after deep() returned (StackInuse)?\n\nAnswer options:\nA. Back to the starting size of about 2 KB\nB. About a quarter of that size\nC. Still the full size; goroutine stacks never shrink\nD. About half of that size\n\nWhich explanation best describes the cause?\nA. A stack that grew stays at its largest size until the goroutine exits\nB. The runtime shrinks stacks on a timer, roughly once per second, independent of garbage collection\nC. Each garbage collection halves a stack that uses less than a quarter of its size, one halving per cycle\nD. When the deep calls return, the runtime releases the extra stack and the goroutine goes back to its starting stack\n\nEstimate: stack held by each goroutine after the two collections, in KB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in KB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "```json\n{\"answer\": \"C\", \"estimate\": 1024, \"mechanism\": \"A\", \"confidence\": 95, \"reasoning\": \"Go goroutine stacks grow dynamically as needed, but they never automatically shrink when functions return. Once a stack reaches a large size (like ~1MB for 1000 deep calls with 1KB arrays), it stays at that peak size for the remainder of the goroutine's lifetime. Neither garbage collection nor returning from deep calls causes the stack memory to be released.\"}\n```"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 577,
+                "outputTokens": 116,
+                "inputTokensCostNanodollars": "173100",
+                "outputTokensCostNanodollars": "290000",
+                "totalBackendLatencyMs": "720"
+              },
+              "id": "MemoryTrap Item-3fbd03be-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 577,
+            "outputTokens": 116,
+            "inputTokensCostNanodollars": "173100",
+            "outputTokensCostNanodollars": "290000",
+            "totalBackendLatencyMs": "720"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 0.0,
+            "folklore_answer": 0.0,
+            "answer": "C",
+            "correct_mechanism": "C",
+            "item": "R3@go-1.24",
+            "estimate_ok": 0.0,
+            "estimate": 1024.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              512.32
+            ],
+            "version": "go-1.24",
+            "case_score": 0.0,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "B",
+            "folklore_mechanism": 0.0,
+            "case": "R3",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "A",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "R3@go-1.24 answer B: About a quarter of that size",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-3fbd03be",
+              "requestId": "MemoryTrap Item-3fbd03be-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R3@go-1.24 mechanism C",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-3fbd03be",
+              "requestId": "MemoryTrap Item-3fbd03be-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R3@go-1.24 estimate within 0.67x-1.5x of the measured 512.32 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-3fbd03be",
+              "requestId": "MemoryTrap Item-3fbd03be-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #19"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:23.224942Z",
+      "endTime": "2026-10-10T01:10:24.258895Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-37e9bdf7",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nvar sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started sync.WaitGroup\nholdDone := make(chan struct{})\nstarted.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo hold8k(&started, holdDone)\n}\nstarted.Wait()\nruntime.GC()\n\nvar idle sync.WaitGroup\ndone := make(chan struct{})\nidle.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tidle.Done()\n\t\t<-done\n\t}()\n}\nidle.Wait()\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: The first batch of goroutines keeps an 8 KB array on the stack and is still alive. How much stack (StackInuse delta) does each goroutine of the second, idle batch start with?\n\nAnswer options:\nA. About 16 KB\nB. About 2 KB\nC. About 8 KB\nD. About 4 KB\n\nWhich explanation best describes the cause?\nA. Every new goroutine starts with the minimum stack and grows it only when its own frames need more\nB. Since Go 1.19 every new goroutine starts at the average stack size that the last garbage collection observed across all goroutines\nC. New goroutines inherit the current stack size of the goroutine that starts them, here the main goroutine\nD. The runtime doubles the starting stack once it has seen many stack growths, and keeps it doubled for later goroutines\n\nEstimate: starting stack per goroutine of the second batch, in KB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in KB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"A\", \"estimate\": 16, \"mechanism\": \"D\", \"confidence\": 95, \"reasoning\": \"Go's runtime tracks stack sizes across garbage collections (specifically via `maxstacksize` heuristics or global stack-allocation tuning introduced in recent versions, historically refined by Dmitry Vyukov). When many goroutines allocate large stacks (like the 8KB arrays here), the runtime adapts and increases the default initial stack size for new goroutines (from 2KB to 4KB, 8KB, or 16KB) to avoid costly reallocations.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 617,
+                "outputTokens": 126,
+                "inputTokensCostNanodollars": "185100",
+                "outputTokensCostNanodollars": "315000",
+                "totalBackendLatencyMs": "866"
+              },
+              "id": "MemoryTrap Item-37e9bdf7-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 617,
+            "outputTokens": 126,
+            "inputTokensCostNanodollars": "185100",
+            "outputTokensCostNanodollars": "315000",
+            "totalBackendLatencyMs": "866"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 0.0,
+            "folklore_answer": 0.0,
+            "answer": "A",
+            "correct_mechanism": "A",
+            "item": "R4@go-1.24",
+            "estimate_ok": 0.0,
+            "estimate": 16.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              2.0
+            ],
+            "version": "go-1.24",
+            "case_score": 0.0,
+            "parse_failure": false,
+            "control": true,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "B",
+            "folklore_mechanism": 0.0,
+            "case": "R4",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "D",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "R4@go-1.24 answer B: About 2 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-37e9bdf7",
+              "requestId": "MemoryTrap Item-37e9bdf7-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R4@go-1.24 mechanism A",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-37e9bdf7",
+              "requestId": "MemoryTrap Item-37e9bdf7-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R4@go-1.24 estimate within 0.67x-1.5x of the measured 2 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-37e9bdf7",
+              "requestId": "MemoryTrap Item-37e9bdf7-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #20"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_COMPLETED",
+      "startTime": "2026-10-10T01:10:24.259246Z",
+      "endTime": "2026-10-10T01:10:25.211490Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-e886008b",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in Go. Read the code, then answer.\n\n```go\nvar sink atomic.Int64\n\nfunc hold8k(started *sync.WaitGroup, done <-chan struct{}) {\n\tvar buf [8192]byte\n\tfor i := range buf {\n\t\tbuf[i] = byte(i)\n\t}\n\tstarted.Done()\n\t<-done\n\tsink.Add(int64(buf[len(buf)-1]))\n}\n\n// in main:\nvar started, exited sync.WaitGroup\nholdDone := make(chan struct{})\nstarted.Add(100_000)\nexited.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\thold8k(&started, holdDone)\n\t\texited.Done()\n\t}()\n}\nstarted.Wait()\nruntime.GC()\nclose(holdDone)\nexited.Wait()\n\nvar idle sync.WaitGroup\ndone := make(chan struct{})\nidle.Add(100_000)\nfor i := 0; i < 100_000; i++ {\n\tgo func() {\n\t\tidle.Done()\n\t\t<-done\n\t}()\n}\nidle.Wait()\n```\n\nRuntime: Go 1.24.x, linux/amd64.\n\nQuestion: The first batch has exited. How much stack (StackInuse, compared with before the first batch) does each goroutine of the second, idle batch hold?\n\nAnswer options:\nA. About 16 KB\nB. About 32 KB\nC. About 2 KB\nD. About 8 KB\n\nWhich explanation best describes the cause?\nA. Exited goroutines keep their stacks forever and the new ones get fresh ones, so the second batch adds a full extra set on top\nB. Every new goroutine starts with the minimum stack and grows it only when its own frames need more space\nC. A goroutine that reuses an exited descriptor gets the starting size computed from the stacks the last GC scanned\nD. The runtime caps the starting stack of idle goroutines at half of the largest stack it has seen so far in the process\n\nEstimate: stack per goroutine of the second batch, in KB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in KB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                },
+                {
+                  "parts": [
+                    {
+                      "text": "{\"answer\": \"C\", \"estimate\": 16, \"mechanism\": \"C\", \"confidence\": 95, \"reasoning\": \"Go goroutine stack cache reuses exited stack segments. In Go 1.21+, the runtime sets the initial stack size of new/reused goroutines based on a historical maximum size computed during GC (stackMin). Since the first batch of goroutines held 8KB arrays plus call frames, their stack size was around 16KB, and the second batch inherits this minimum size.\"}"
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_ASSISTANT",
+                  "senderName": "google/gemini-3.5-flash-lite"
+                }
+              ],
+              "metrics": {
+                "inputTokens": 654,
+                "outputTokens": 113,
+                "inputTokensCostNanodollars": "196200",
+                "outputTokensCostNanodollars": "282500",
+                "totalBackendLatencyMs": "797"
+              },
+              "id": "MemoryTrap Item-e886008b-req-1"
+            }
+          ],
+          "metrics": {
+            "inputTokens": 654,
+            "outputTokens": 113,
+            "inputTokensCostNanodollars": "196200",
+            "outputTokensCostNanodollars": "282500",
+            "totalBackendLatencyMs": "797"
+          },
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "dictResult": {
+            "mechanism_ok": 1.0,
+            "folklore_answer": 1.0,
+            "answer": "C",
+            "correct_mechanism": "C",
+            "item": "R6@go-1.24",
+            "estimate_ok": 1.0,
+            "estimate": 16.0,
+            "confidently_wrong": 1.0,
+            "retried": false,
+            "expected_estimate": [
+              16.0
+            ],
+            "version": "go-1.24",
+            "case_score": 0.6666666666666666,
+            "parse_failure": false,
+            "control": false,
+            "right_answer_wrong_mechanism": 0.0,
+            "expected_answer": "A",
+            "folklore_mechanism": 0.0,
+            "case": "R6",
+            "answer_ok": 0.0,
+            "confidence": 95.0,
+            "mechanism": "C",
+            "condition": "versioned"
+          }
+        }
+      ],
+      "assertions": [
+        {
+          "expectation": "R6@go-1.24 answer A: About 16 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_FAILED",
+          "lineNumber": 29,
+          "definition": "kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-e886008b",
+              "requestId": "MemoryTrap Item-e886008b-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R6@go-1.24 mechanism C",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 30,
+          "definition": "kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-e886008b",
+              "requestId": "MemoryTrap Item-e886008b-req-1"
+            }
+          ]
+        },
+        {
+          "expectation": "R6@go-1.24 estimate within 0.67x-1.5x of the measured 16 KB",
+          "status": "BENCHMARK_TASK_RUN_ASSERTION_STATUS_PASSED",
+          "lineNumber": 31,
+          "definition": "kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])",
+          "conversationRequestIds": [
+            {
+              "conversationId": "MemoryTrap Item-e886008b",
+              "requestId": "MemoryTrap Item-e886008b-req-1"
+            }
+          ]
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #21"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_ERRORED",
+      "startTime": "2026-10-10T01:09:57.410681Z",
+      "endTime": "2026-10-10T01:10:28.185124Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-e2d5c5ba",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\nfinal class Point\n{\n    public function __construct(\n        public int $x,\n        public int $y,\n        public int $z,\n    ) {}\n}\n\n$objects = [];\nfor ($i = 0; $i < 100_000; $i++) {\n    $objects[] = new Point($i, $i, $i);\n}\n```\n\n```php\n$arrays = [];\nfor ($i = 0; $i < 100_000; $i++) {\n    $arrays[] = ['x' => $i, 'y' => $i, 'z' => $i];\n}\n```\n\nRuntime: PHP 8.3.x, CLI, NTS, opcache disabled.\n\nQuestion: How does the memory taken by $arrays compare with the memory taken by $objects, as reported by memory_get_usage()?\n\nAnswer options:\nA. About the same\nB. $arrays takes about 3 times as much\nC. $arrays takes about 1.5 times as much\nD. $arrays takes about half as much\n\nWhich explanation best describes the cause?\nA. Each object carries a class pointer, a handler table and a property table on top of its data, so it costs more than a plain array\nB. Both store their fields in a hash table keyed by property name, so a three-field object and a three-key array cost the same\nC. Declared properties sit in a fixed slot table inside each object; each array allocates its own hash table with spare buckets\nD. Arrays with identical keys share one key table behind the scenes, while every object keeps its own copy of the property names and types\n\nEstimate: memory taken by $arrays, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "MemoryTrap Item-e2d5c5ba-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "booleanResult": false
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #4",
+      "errorMessage": "Traceback (most recent call last):\n  File \"/benchmarks/src/kaggle_benchmarks/tasks.py\", line 171, in run\n    run.result = self.func(*args, **kwargs)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/ipykernel_14/1122625979.py\", line 19, in memtrap_item\n    reply = ask(llm, item[\"prompt\"])\n            ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/ipykernel_14/1122625979.py\", line 8, in ask\n    return llm.respond().content\n           ^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/chats.py\", line 124, in wrapper\n    result = func(self, *args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/llms.py\", line 304, in respond\n    invoke_response = self.invoke(\n                      ^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/proxy_openai.py\", line 146, in invoke\n    return self._call_api(raw_messages, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/proxy_openai.py\", line 197, in _call_api\n    response = method(\n               ^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_utils/_utils.py\", line 298, in wrapper\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/resources/chat/completions/completions.py\", line 1308, in create\n    return self._post(\n           ^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_base_client.py\", line 1378, in post\n    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_base_client.py\", line 1151, in request\n    raise self._make_status_error_from_response(err.response) from None\nopenai.PermissionDeniedError: Error code: 403 - {'code': '', 'message': 'The max estimated cost of operation ($0.1640029) exceeds your available quota (based on max_output_tokens). Set max_output_tokens in your request to lower the reservation, or try again later.', 'param': '', 'type': 'permission_error'}\n"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_ERRORED",
+      "startTime": "2026-10-10T01:09:57.409985Z",
+      "endTime": "2026-10-10T01:10:28.186111Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-8521dd02",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$a = range(1, 1_000_000);\nfor ($i = 0; $i < 1_000_000; $i += 2) {\n    unset($a[$i]);\n}\n```\n\nRuntime: PHP 8.3.x, CLI, NTS, opcache disabled.\n\nQuestion: After the loop removes half of the elements, how does the memory held by $a compare with the memory it held right before the loop, as reported by memory_get_usage()?\n\nAnswer options:\nA. It stays about the same\nB. It drops by about half\nC. It drops by about a quarter\nD. It grows\n\nWhich explanation best describes the cause?\nA. The first unset() converts the packed list into a hash table, and the hash layout needs more room per remaining element\nB. PHP compacts the array during the next garbage collection cycle and hands the freed slots back to the allocator\nC. unset() frees each element's slot right away, so the array shrinks in step with the number of elements it still holds\nD. unset() only marks each slot as empty; the array keeps its whole allocation until it is rebuilt or has to grow again\n\nEstimate: memory held by $a after the loop, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "MemoryTrap Item-8521dd02-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "booleanResult": false
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #3",
+      "errorMessage": "Traceback (most recent call last):\n  File \"/benchmarks/src/kaggle_benchmarks/tasks.py\", line 171, in run\n    run.result = self.func(*args, **kwargs)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/ipykernel_14/1122625979.py\", line 19, in memtrap_item\n    reply = ask(llm, item[\"prompt\"])\n            ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/ipykernel_14/1122625979.py\", line 8, in ask\n    return llm.respond().content\n           ^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/chats.py\", line 124, in wrapper\n    result = func(self, *args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/llms.py\", line 304, in respond\n    invoke_response = self.invoke(\n                      ^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/proxy_openai.py\", line 146, in invoke\n    return self._call_api(raw_messages, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/proxy_openai.py\", line 197, in _call_api\n    response = method(\n               ^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_utils/_utils.py\", line 298, in wrapper\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/resources/chat/completions/completions.py\", line 1308, in create\n    return self._post(\n           ^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_base_client.py\", line 1378, in post\n    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_base_client.py\", line 1151, in request\n    raise self._make_status_error_from_response(err.response) from None\nopenai.PermissionDeniedError: Error code: 403 - {'code': '', 'message': 'The max estimated cost of operation ($0.1639741) exceeds your available quota (based on max_output_tokens). Set max_output_tokens in your request to lower the reservation, or try again later.', 'param': '', 'type': 'permission_error'}\n"
+    },
+    {
+      "taskVersion": {
+        "versionNumber": 1,
+        "name": "MemoryTrap Item",
+        "description": "One case under one condition and runtime version.",
+        "definition": "@kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)\ndef memtrap_item(llm, item_id: str) -> dict:\n    \"\"\"One case under one condition and runtime version.\"\"\"\n    item = ITEMS[item_id]\n    reply = ask(llm, item[\"prompt\"])\n    parsed = parse_response(reply, unit=item[\"unit\"])\n    retried = False\n    if parsed is None:\n        retried = True\n        reply = ask(llm, REPAIR_MESSAGE)\n        parsed = parse_response(reply, unit=item[\"unit\"])\n    row = score_response(item[\"case\"], item[\"truth\"], item[\"condition\"], item[\"version\"], parsed)\n    row[\"item\"] = item_id\n    row[\"retried\"] = retried\n    kbench.assertions.assert_true(row[\"answer_ok\"] == 1, expectation=item[\"expect_answer\"])\n    kbench.assertions.assert_true(row[\"mechanism_ok\"] == 1, expectation=item[\"expect_mechanism\"])\n    kbench.assertions.assert_true(row[\"estimate_ok\"] == 1, expectation=item[\"expect_estimate\"])\n    return row\n"
+      },
+      "modelVersion": {
+        "slug": "google/gemini-3.5-flash-lite"
+      },
+      "state": "BENCHMARK_TASK_RUN_STATE_ERRORED",
+      "startTime": "2026-10-10T01:09:57.409414Z",
+      "endTime": "2026-10-10T01:10:28.209402Z",
+      "conversations": [
+        {
+          "id": "MemoryTrap Item-94c168a4",
+          "requests": [
+            {
+              "contents": [
+                {
+                  "parts": [
+                    {
+                      "text": "A question about memory use in PHP. Read the code, then answer.\n\n```php\n$a = range(1, 1_000_000);\n```\n\n```php\n$b = [];\nfor ($i = 1_000_000; $i >= 1; $i--) {\n    $b[$i] = $i;\n}\n```\n\nRuntime: PHP 8.3.x, CLI, NTS, opcache disabled.\n\nQuestion: Both arrays hold the same one million integers. How does the memory taken by $b compare with the memory taken by $a, as reported by memory_get_usage()?\n\nAnswer options:\nA. $b takes about 25% more than $a\nB. $b takes about 2.5x as much\nC. About the same\nD. It depends on the PHP version\n\nWhich explanation best describes the cause?\nA. Descending keys keep the array packed; since PHP 8.0 the engine reserves empty slack in front of the first key so inserts at the front stay cheap\nB. Descending keys force the hash layout (keyed buckets plus a hash index); range() builds a packed list, stored as bare values since PHP 8.2\nC. Integer keys above the initial capacity trigger a rehash, and every rehash widens each bucket so it can hold the larger range of keys\nD. Both arrays are the same kind of hash table underneath; only the order in which the buckets are linked differs, so the sizes match\n\nEstimate: memory taken by $b, in MB. Sizes are binary: 1 MB = 1,048,576 bytes, 1 KB = 1,024 bytes.\n\nReply with one JSON object and nothing else, in this shape:\n{\"answer\": \"<letter>\", \"estimate\": <number>, \"mechanism\": \"<letter>\", \"confidence\": <integer>, \"reasoning\": \"<text>\"}\nanswer: the letter of the answer option. estimate: a number in MB. mechanism: the letter of the explanation. confidence: an integer from 0 to 100 for how sure you are about the answer. reasoning: at most 60 words."
+                    }
+                  ],
+                  "role": "CONTENT_ROLE_USER",
+                  "senderName": "User"
+                }
+              ],
+              "id": "MemoryTrap Item-94c168a4-req-1"
+            }
+          ],
+          "metrics": {},
+          "modelVersionSlug": "model_version_slug for conversation is DEPRECATED"
+        }
+      ],
+      "results": [
+        {
+          "type": "AGGREGATED",
+          "booleanResult": false
+        }
+      ],
+      "pyRunId": "MemoryTrap Item-Run #2",
+      "errorMessage": "Traceback (most recent call last):\n  File \"/benchmarks/src/kaggle_benchmarks/tasks.py\", line 171, in run\n    run.result = self.func(*args, **kwargs)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/ipykernel_14/1122625979.py\", line 19, in memtrap_item\n    reply = ask(llm, item[\"prompt\"])\n            ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tmp/ipykernel_14/1122625979.py\", line 8, in ask\n    return llm.respond().content\n           ^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/chats.py\", line 124, in wrapper\n    result = func(self, *args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/llms.py\", line 304, in respond\n    invoke_response = self.invoke(\n                      ^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/proxy_openai.py\", line 146, in invoke\n    return self._call_api(raw_messages, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/src/kaggle_benchmarks/actors/proxy_openai.py\", line 197, in _call_api\n    response = method(\n               ^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_utils/_utils.py\", line 298, in wrapper\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/resources/chat/completions/completions.py\", line 1308, in create\n    return self._post(\n           ^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_base_client.py\", line 1378, in post\n    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/benchmarks/.venv/lib/python3.12/site-packages/openai/_base_client.py\", line 1151, in request\n    raise self._make_status_error_from_response(err.response) from None\nopenai.PermissionDeniedError: Error code: 403 - {'code': '', 'message': 'The max estimated cost of operation ($0.1639843) exceeds your available quota (based on max_output_tokens). Set max_output_tokens in your request to lower the reservation, or try again later.', 'param': '', 'type': 'permission_error'}\n"
+    }
+  ],
+  "pyRunId": "MemoryTrap Versioned-Run #1"
+}

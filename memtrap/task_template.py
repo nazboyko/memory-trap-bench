@@ -76,7 +76,7 @@ def memtrap_item(llm, item_id: str) -> dict:
     return row
 
 
-@kbench.task(name={task_name!r}, description={description!r})
+@kbench.task(name={task_name!r}, description={summary!r})
 def {function_name}(llm) -> float:
     """Mean case score over every item: (answer + estimate + mechanism) / 3."""
     data = pd.DataFrame({{"item_id": list(ITEMS)}}, index=list(ITEMS))

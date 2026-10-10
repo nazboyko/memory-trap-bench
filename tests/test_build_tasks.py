@@ -63,6 +63,16 @@ def test_rendered_task_is_valid_python_with_cells(cases, truth):
     assert "from __future__" not in src
 
 
+def test_task_text_fits_the_kaggle_limit(cases, truth):
+    from memtrap.build_tasks import KAGGLE_TEXT_LIMIT, PILOT
+
+    items = build_items(cases, truth, "cold")
+    for spec in [*TASKS.values(), PILOT]:
+        assert len(spec["name"]) <= KAGGLE_TEXT_LIMIT and len(spec["summary"]) <= KAGGLE_TEXT_LIMIT, spec["file"]
+    with pytest.raises(BuildError):
+        render_task({**TASKS["cold"], "summary": "x" * (KAGGLE_TEXT_LIMIT + 1)}, "cold", items)
+
+
 def test_module_source_drops_docstring():
     src = module_source(ROOT / "memtrap" / "parse.py")
     assert src.startswith("import json")

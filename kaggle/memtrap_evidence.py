@@ -1721,7 +1721,7 @@ def memtrap_item(llm, item_id: str) -> dict:
     return row
 
 
-@kbench.task(name='MemoryTrap Evidence', description="The versioned MemoryTrap Bench questions plus one measured fact from another case of the same family, which contradicts the family's rule of thumb without giving the answer. Does a real number move the answer? Scored like the cold task.")
+@kbench.task(name='MemoryTrap Evidence', description="The versioned MemoryTrap Bench questions plus one measured fact from another case of the same family, which contradicts the family's rule of thumb without giving the answer. Scored on answer, estimate and mechanism against measured values.")
 def memtrap_evidence(llm) -> float:
     """Mean case score over every item: (answer + estimate + mechanism) / 3."""
     data = pd.DataFrame({"item_id": list(ITEMS)}, index=list(ITEMS))

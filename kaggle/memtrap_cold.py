@@ -1376,7 +1376,7 @@ def memtrap_item(llm, item_id: str) -> dict:
     return row
 
 
-@kbench.task(name='MemoryTrap Cold', description='Seventeen questions about memory use in PHP arrays, Go maps and goroutine stacks, asked with the code only. Each reply is scored against numbers measured on pinned runtime versions: the answer option, an estimate within 0.67x to 1.5x of the measured value, and the mechanism, one third each. Three cases are controls where the rule of thumb holds.')
+@kbench.task(name='MemoryTrap Cold', description='Seventeen memory questions about PHP arrays, Go maps and goroutine stacks, asked with the code only. Scored against values measured on pinned runtime versions: answer, estimate within 0.67x to 1.5x, mechanism. Three cases are controls.')
 def memtrap_cold(llm) -> float:
     """Mean case score over every item: (answer + estimate + mechanism) / 3."""
     data = pd.DataFrame({"item_id": list(ITEMS)}, index=list(ITEMS))

@@ -21,6 +21,7 @@ from memtrap.validate import validate
 OUT_DIR = ROOT / "kaggle"
 REPO_URL = "https://github.com/nazboyko/memory-trap-bench"
 ITEM_TASK_NAME = "MemoryTrap Item"
+KAGGLE_TEXT_LIMIT = 255  # Kaggle refuses a task whose name or description is longer
 
 TASKS = {
     "cold": {
@@ -34,6 +35,11 @@ TASKS = {
             "the answer option, an estimate within 0.67x to 1.5x of the measured value, and the "
             "mechanism, one third each. Three cases are controls where the rule of thumb holds."
         ),
+        "summary": (
+            "Seventeen memory questions about PHP arrays, Go maps and goroutine stacks, asked with the code "
+            "only. Scored against values measured on pinned runtime versions: answer, estimate within "
+            "0.67x to 1.5x, mechanism. Three cases are controls."
+        ),
     },
     "versioned": {
         "file": "memtrap_versioned.py",
@@ -44,6 +50,11 @@ TASKS = {
             "The MemoryTrap Bench questions with the runtime version added (PHP 8.1 or 8.3, Go 1.23 or "
             "1.24). Cases whose measured answer differs between versions are asked once per version. "
             "Scored like the cold task: answer, estimate within 0.67x to 1.5x, mechanism."
+        ),
+        "summary": (
+            "The MemoryTrap Bench questions with the runtime version added (PHP 8.1 or 8.3, Go 1.23 or 1.24). "
+            "Cases whose measured answer differs between versions are asked once per version. Scored on "
+            "answer, estimate and mechanism against measured values."
         ),
     },
     "evidence": {
@@ -56,6 +67,11 @@ TASKS = {
             "same family, which contradicts the family's rule of thumb without giving the answer. "
             "Does a real number move the answer? Scored like the cold task."
         ),
+        "summary": (
+            "The versioned MemoryTrap Bench questions plus one measured fact from another case of the same "
+            "family, which contradicts the family's rule of thumb without giving the answer. Scored on "
+            "answer, estimate and mechanism against measured values."
+        ),
     },
 }
 PILOT = {
@@ -64,6 +80,7 @@ PILOT = {
     "function": "memtrap_pilot",
     "title": "MemoryTrap Bench: pilot",
     "description": TASKS["cold"]["description"],
+    "summary": TASKS["cold"]["summary"],
 }
 
 
@@ -147,9 +164,13 @@ def module_source(path: Path) -> str:
 
 
 def render_task(spec: dict, condition: str, items: dict, limit: int | None = None) -> str:
+    for field in ("name", "summary"):
+        if len(spec[field]) > KAGGLE_TEXT_LIMIT:
+            raise BuildError(f"{spec['file']}: {field} has {len(spec[field])} characters, Kaggle allows {KAGGLE_TEXT_LIMIT}")
     return TEMPLATE.format(
         title=spec["title"],
         description=spec["description"],
+        summary=spec["summary"],
         repo_url=REPO_URL,
         condition=condition,
         item_limit=limit,

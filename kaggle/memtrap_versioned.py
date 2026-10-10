@@ -1658,7 +1658,7 @@ def memtrap_item(llm, item_id: str) -> dict:
     return row
 
 
-@kbench.task(name='MemoryTrap Versioned', description='The MemoryTrap Bench questions with the runtime version added (PHP 8.1 or 8.3, Go 1.23 or 1.24). Cases whose measured answer differs between versions are asked once per version. Scored like the cold task: answer, estimate within 0.67x to 1.5x, mechanism.')
+@kbench.task(name='MemoryTrap Versioned', description='The MemoryTrap Bench questions with the runtime version added (PHP 8.1 or 8.3, Go 1.23 or 1.24). Cases whose measured answer differs between versions are asked once per version. Scored on answer, estimate and mechanism against measured values.')
 def memtrap_versioned(llm) -> float:
     """Mean case score over every item: (answer + estimate + mechanism) / 3."""
     data = pd.DataFrame({"item_id": list(ITEMS)}, index=list(ITEMS))

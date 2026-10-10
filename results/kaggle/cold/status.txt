@@ -7,7 +7,7 @@ Task URL: https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-cold/1
 
 Model                          Status          Started             Ended              
 ────────────────────────────── ─────────────── ─────────────────── ───────────────────
-qwen3-coder-480b-a35b-instruct Running                                                
+qwen3-coder-480b-a35b-instruct Completed       2026-10-10 00:58:30 2026-10-10 01:20:43
 gemma-4-31b-it                 Completed       2026-10-10 00:58:33 2026-10-10 01:05:45
 gpt-oss-120b                   Completed       2026-10-10 00:58:32 2026-10-10 01:01:04
 gpt-6.1-sol                    Completed       2026-10-10 00:58:30 2026-10-10 01:00:24

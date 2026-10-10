@@ -1,24 +1,22 @@
 Task:     memorytrap-evidence
-Version:  1
+Version:  2
 Status:   Completed
-Created:  2026-10-10 00:58:36
+Created:  2026-10-10 01:37:43
 Public:   False
-Task URL: https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-evidence/1
+Task URL: https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-evidence/2
 
 Model                          Status          Started             Ended              
 ────────────────────────────── ─────────────── ─────────────────── ───────────────────
-qwen3-coder-480b-a35b-instruct Running                                                
-gemma-4-31b-it                 Running                                                
-gpt-oss-120b                   Completed       2026-10-10 01:09:55 2026-10-10 01:14:25
-gpt-6.1-sol                    Completed       2026-10-10 01:09:55 2026-10-10 01:12:29
-gpt-5.4-nano-2026-03-17        Completed       2026-10-10 01:09:48 2026-10-10 01:10:24
-claude-haiku-4-5-20251001      Completed       2026-10-10 01:09:54 2026-10-10 01:11:49
-claude-opus-5-5-default        Completed       2026-10-10 01:09:54 2026-10-10 01:12:55
-claude-haiku-5-5               Completed       2026-10-10 01:09:51 2026-10-10 01:10:24
-gemini-2.5-flash               Completed       2026-10-10 01:09:52 2026-10-10 01:13:27
-gemini-3.1-pro-preview         Completed       2026-10-10 01:09:52 2026-10-10 01:13:40
-gemini-3.8-flash               Completed       2026-10-10 01:09:55 2026-10-10 01:12:06
-gemini-3.5-flash-lite          Completed       2026-10-10 01:10:00 2026-10-10 01:10:34
-gemini-3.7-flash               Completed       2026-10-10 00:59:29 2026-10-10 01:01:16
+gpt-oss-120b                   Completed       2026-10-10 02:02:48 2026-10-10 02:07:15
+gpt-5.4-nano-2026-03-17        Completed       2026-10-10 02:02:45 2026-10-10 02:02:54
+gemini-3.5-flash-lite          Completed       2026-10-10 02:02:40 2026-10-10 02:02:46
+gemini-3.8-flash               Completed       2026-10-10 02:02:40 2026-10-10 02:04:50
+claude-haiku-4-5-20251001      Completed       2026-10-10 01:50:20 2026-10-10 01:51:01
+claude-haiku-5-5               Completed       2026-10-10 01:50:23 2026-10-10 01:51:32
+gpt-6.1-sol                    Completed       2026-10-10 01:50:22 2026-10-10 01:52:32
+claude-opus-5-5-default        Completed       2026-10-10 01:50:18 2026-10-10 01:51:37
+qwen3-coder-480b-a35b-instruct Completed       2026-10-10 01:43:27 2026-10-10 01:59:38
+gemma-4-31b-it                 Completed       2026-10-10 01:43:29 2026-10-10 01:54:17
+gemini-3.7-flash               Completed       2026-10-10 01:38:33 2026-10-10 01:40:35
 
 View logs: kaggle b t log memorytrap-evidence [-m <model>]

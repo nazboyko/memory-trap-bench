@@ -207,3 +207,21 @@ def test_pair_counts_and_control_quotes(stub_runs):
     # The garbage stub gives no reasoning and the correct stub loses no control: nothing to quote.
     assert control_quote_rows(rows_all, ["stub-correct", "stub-garbage"], cases) == []
     assert PAIR == ("R4", "R6")
+
+
+def test_quotes_file_is_verbatim_and_short_first(stub_runs, tmp_path):
+    from memtrap.analyze import quotes_file
+
+    cases, truth = load_cases(), load_truth()
+    row = {"case": "G3", "condition": "cold", "answer": "B", "answer_ok": 0, "confidence": 90, "folklore_mechanism": 1}
+    rows_all = {"m-long": [{**row, "reasoning": "struct{} is free,   so the set is half the size of the bool map."}],
+                "m-short": [{**row, "reasoning": "struct{} is free."}],
+                "m-right": [{**row, "folklore_mechanism": 0, "reasoning": "Same slot size."}]}
+    text = quotes_file(rows_all, ["m-long", "m-short", "m-right"], cases, truth)
+    g3 = text.split("## G3")[1].split("## ")[0]
+    assert g3.index("`m-short`") < g3.index("`m-long`") and "m-right" not in g3
+    assert "> struct{} is free, so the set is half the size of the bool map." in g3
+    assert "No scored reply chose the folklore mechanism." in text.split("## P2")[1].split("## ")[0]
+    # The report writes the file next to itself.
+    build_report(cases, truth, load_runs(stub_runs), stub_runs, tmp_path, None)
+    assert (tmp_path / "quotes.md").exists()

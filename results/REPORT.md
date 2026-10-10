@@ -291,6 +291,8 @@ For each case, the shortest reasoning among replies that chose the folklore mech
 | R3 | `qwen3-coder-480b-a35b-instruct` | evidence | "Go runtime releases unused stack space after function returns and GC cycles. Each goroutine's stack shrinks back to its original size since the large stack was only needed during recursion." |
 | R6 | `qwen3-coder-480b-a35b-instruct` | cold | "Each goroutine starts with a small stack (typically 2KB) and grows only if needed. The idle goroutines do minimal work, so they retain the initial small stack size." |
 
+More quotes per case: [quotes.md](quotes.md).
+
 ### A control lost, in the models' own words
 
 For each control, the best-ranked models that answered it wrong (at most three), each with its shortest reasoning, verbatim.

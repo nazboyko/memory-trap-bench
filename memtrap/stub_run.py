@@ -24,6 +24,10 @@ from collections import Counter
 from pathlib import Path
 
 os.environ.setdefault("BENCHMARK_CONSOLE_QUIET", "True")
+# `kaggle b auth` writes a .env with the proxy URL and key only, and the
+# library then fails on import without a default model name. The stubs never
+# call it, so any name will do.
+os.environ.setdefault("LLM_DEFAULT", "google/gemini-3.7-flash")
 
 import kaggle_benchmarks as kbench  # noqa: E402
 from kaggle_benchmarks.actors.llms import LLMChat, LLMResponse  # noqa: E402

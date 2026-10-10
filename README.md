@@ -6,6 +6,9 @@ versions.
 
 ![Mean task score per model, from gpt-6.1-sol at 0.95 to gpt-5.4-nano-2026-03-17 at 0.39, with the author's cold score of 0.67 as a dashed line](docs/img/leaderboard.png)
 
+The benchmark and its leaderboard are on Kaggle:
+[MemoryTrap Bench: PHP arrays, Go maps, goroutines](https://www.kaggle.com/benchmarks/nb9300/memorytrap-bench-php-arrays-go-maps/leaderboard).
+
 Twelve models have a complete run on the three Kaggle tasks
 ([memorytrap-cold](https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-cold),
 [memorytrap-versioned](https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-versioned),

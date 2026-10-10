@@ -108,3 +108,38 @@ def test_repair_turn_and_final_json_are_scored(tmp_path, monkeypatch):
     for mode in ("repair", "draft"):
         s = run_stub(namespace, spec["function"], mode)
         assert s["task_score"] == 1.0 and s["parse_failures"] == 0, mode
+
+
+def failing_stub_run(tmp_path, monkeypatch, mode):
+    from memtrap.stub_run import StubLLM, load_task
+
+    monkeypatch.chdir(tmp_path)
+    spec = TASKS["cold"]
+    namespace = load_task(OUT_DIR / spec["file"], spec["function"])
+    namespace["QUOTA_SLEEP"] = namespace["RETRY_SLEEP"] = 0
+    stub = StubLLM(mode, namespace["ITEMS"])
+    run = namespace[spec["function"]].run(stub)
+    return namespace, stub, run
+
+
+def test_quota_refusals_are_waited_out(tmp_path, monkeypatch):
+    namespace, stub, run = failing_stub_run(tmp_path, monkeypatch, "quota")
+    assert run.result == 1.0
+    assert set(stub.calls.values()) == {3}  # two refusals, then the reply
+    assert set(stub.caps) == {namespace["MAX_OUTPUT_TOKENS"]}
+    # A retry asks for a reply to the same history; the question is never sent twice.
+    assert set(stub.last_messages) == set(stub.by_prompt)
+
+
+def test_a_refused_output_cap_is_dropped_for_that_model(tmp_path, monkeypatch):
+    namespace, stub, run = failing_stub_run(tmp_path, monkeypatch, "badcap")
+    assert run.result == 1.0
+    assert stub.name in namespace["UNCAPPED"]
+    assert stub.caps.count(None) >= len(namespace["ITEMS"])
+
+
+def test_a_dead_proxy_gives_up_after_three_errors(tmp_path, monkeypatch):
+    namespace, stub, run = failing_stub_run(tmp_path, monkeypatch, "down")
+    assert run.result == 0.0
+    assert set(stub.calls.values()) == {namespace["ATTEMPTS"]}
+    assert not [sub for sub in run.subruns if isinstance(sub.result, dict)]

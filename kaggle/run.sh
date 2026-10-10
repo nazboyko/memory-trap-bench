@@ -10,6 +10,11 @@
 #
 # push, run, download and publish take a condition as a second argument to
 # handle one task: sh kaggle/run.sh run cold
+# MODELS="slug slug" in the environment replaces the lineup; BATCH sets how
+# many models run at once (default 4).
+#
+# Kaggle's model proxy reserves the worst-case cost of every call against a
+# daily quota, so the lineup runs in small batches, expensive models first.
 #
 # Needs a Kaggle account with Benchmarks access and the kaggle CLI (2.2.4 or
 # later) logged in. Task files are generated with
@@ -17,10 +22,10 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-MODELS="gemini-3.5-flash-lite gemini-3.8-flash gemini-3.1-pro-preview gemini-2.5-flash
-claude-haiku-5-5 claude-opus-5-5-default claude-haiku-4-5-20251001
-gpt-5.4-nano-2026-03-17 gpt-6.1-sol
-gpt-oss-120b gemma-4-31b-it qwen3-coder-480b-a35b-instruct"
+MODELS=${MODELS:-"claude-opus-5-5-default gpt-6.1-sol gemini-3.1-pro-preview claude-haiku-5-5
+gemini-3.8-flash gemini-2.5-flash claude-haiku-4-5-20251001 gpt-5.4-nano-2026-03-17
+gemini-3.5-flash-lite gpt-oss-120b gemma-4-31b-it qwen3-coder-480b-a35b-instruct"}
+BATCH=${BATCH:-4}
 PILOT_MODELS="gemini-3.5-flash-lite gpt-5.4-nano-2026-03-17"
 ALL_TASKS="cold:memorytrap-cold versioned:memorytrap-versioned evidence:memorytrap-evidence"
 WAIT=7200
@@ -67,13 +72,27 @@ push() {
     done
 }
 
+# Each batch of models goes through every task before the next batch starts,
+# so a model has all its conditions before the quota is spent on the next one.
 run() {
-    models=$(available_models "$MODELS")
+    # shellcheck disable=SC2046
+    set -- $(available_models "$MODELS")
+    while [ $# -gt 0 ]; do
+        batch=""
+        n=0
+        while [ $# -gt 0 ] && [ "$n" -lt "$BATCH" ]; do
+            batch="$batch $1"
+            shift
+            n=$((n + 1))
+        done
+        for pair in $TASKS; do
+            slug=${pair#*:}
+            # shellcheck disable=SC2046
+            kaggle b t run "$slug" $(model_flags "$batch") --wait "$WAIT" || echo "$slug: the run reported a failure"
+        done
+    done
     for pair in $TASKS; do
-        slug=${pair#*:}
-        # shellcheck disable=SC2046
-        kaggle b t run "$slug" $(model_flags "$models") --wait "$WAIT" || echo "$slug: the run reported a failure"
-        kaggle b t status "$slug" || true
+        kaggle b t status "${pair#*:}" || true
     done
 }
 
@@ -98,5 +117,5 @@ case "${1:-}" in
     download) download ;;
     publish) publish ;;
     all) pilot; push; run; download ;;
-    *) sed -n '2,16p' "$0"; exit 2 ;;
+    *) sed -n '2,22p' "$0"; exit 2 ;;
 esac

@@ -19,6 +19,8 @@ import json
 import os
 import sys
 import tempfile
+import threading
+from collections import Counter
 from pathlib import Path
 
 os.environ.setdefault("BENCHMARK_CONSOLE_QUIET", "True")
@@ -30,6 +32,12 @@ from memtrap.build_tasks import OUT_DIR, TASKS  # noqa: E402
 
 STUBS = ("correct", "folklore", "garbage")
 REPAIR_PREFIX = "Your reply could not be read."
+# The text of the model proxy's refusal when a call's reservation does not fit the quota.
+QUOTA_MESSAGE = (
+    "Error code: 403 - {'message': 'The max estimated cost of operation ($1.28) exceeds your available "
+    "quota (based on max_output_tokens). Set max_output_tokens in your request to lower the reservation, "
+    "or try again later.'}"
+)
 
 
 class StubLLM(LLMChat):
@@ -40,6 +48,10 @@ class StubLLM(LLMChat):
         self.model = f"stub-{mode}"
         self.mode = mode
         self.by_prompt = {item["prompt"]: item for item in items.values()}
+        self.lock = threading.Lock()
+        self.calls: Counter = Counter()  # calls per item prompt
+        self.caps: list = []  # the max_tokens of every call
+        self.last_messages: list = []  # the last message of every call
 
     def reply_for(self, item: dict | None) -> str:
         if self.mode == "garbage" or item is None:
@@ -68,6 +80,22 @@ class StubLLM(LLMChat):
     def invoke(self, messages, system=None, reasoning=None, tools=None, **kwargs):
         texts = [str(m.content) for m in messages]
         last = texts[-1] if texts else ""
+        if self.mode in ("quota", "badcap", "down"):
+            # Failing calls: a quota refusal twice per item, a provider that
+            # rejects the output cap, a proxy that never answers.
+            item = next((self.by_prompt[t] for t in reversed(texts) if t in self.by_prompt), None)
+            with self.lock:
+                self.calls[item["prompt"] if item else last] += 1
+                n = self.calls[item["prompt"] if item else last]
+                self.caps.append(kwargs.get("max_tokens"))
+                self.last_messages.append(last)
+            if self.mode == "down":
+                raise RuntimeError("Connection error.")
+            if self.mode == "quota" and n <= 2:
+                raise RuntimeError(QUOTA_MESSAGE)
+            if self.mode == "badcap" and "max_tokens" in kwargs:
+                raise RuntimeError("Error code: 400 - {'message': 'max_tokens is too large for this model'}")
+            return LLMResponse(content=self.correct_reply(item), meta={"input_tokens": 0})
         if self.mode == "repair":
             # Garbage first, a correct JSON reply after the repair message.
             if last.startswith(REPAIR_PREFIX):

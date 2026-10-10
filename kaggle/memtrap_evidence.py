@@ -9,6 +9,7 @@
 
 # %%
 import json
+import random
 import re
 import time
 
@@ -19,6 +20,11 @@ CONDITION = 'evidence'
 ITEM_LIMIT = None  # None runs every item; the pilot uses a small number
 REPAIR_MESSAGE = "Your reply could not be read. Reply with the JSON object only, nothing else."
 ATTEMPTS = 3  # a nested evaluate() runs each item once, so transient proxy errors are retried here
+RETRY_SLEEP = 10  # seconds, times the number of errors so far
+MAX_OUTPUT_TOKENS = 32768  # reply cap; the proxy reserves a call's worst-case cost against the daily quota
+QUOTA_WAITS = 12  # a refused quota reservation is waited out this many times per message
+QUOTA_SLEEP = 30  # seconds, give or take half
+UNCAPPED = set()  # models whose provider refused the cap
 
 ITEMS = {'P1@php-8.1': {'case_id': 'P1',
                 'condition': 'evidence',
@@ -1687,18 +1693,46 @@ def summarize(rows: list[dict]) -> dict:
 
 
 # %%
+def quota_refusal(exc: Exception) -> bool:
+    """The model proxy reserves the worst-case cost of a call (its maximum
+    output) against the daily quota and refuses the call while other calls
+    hold the rest. The reservation is released when those calls end."""
+    return "available quota" in str(exc)
+
+
+def cap_refusal(exc: Exception) -> bool:
+    text = str(exc)
+    return not quota_refusal(exc) and any(
+        name in text for name in ("max_tokens", "max_completion_tokens", "max_output_tokens")
+    )
+
+
 def ask(llm, message: str) -> str:
     """Send one user message; on an error, ask again for a reply to the same
     history instead of repeating the message."""
-    for attempt in range(ATTEMPTS):
+    sent = False
+    errors = 0
+    waits = 0
+    while True:
+        cap = {} if llm.name in UNCAPPED else {"max_tokens": MAX_OUTPUT_TOKENS}
         try:
-            if attempt == 0:
-                return llm.prompt(message)
-            return llm.respond().content
-        except Exception:
-            if attempt == ATTEMPTS - 1:
+            if not sent:
+                sent = True
+                return llm.prompt(message, extra_api_params=cap)
+            temperature = 0 if getattr(llm, "support_temperature", False) else None
+            return llm.respond(seed=0, temperature=temperature, **cap).content
+        except Exception as exc:
+            if quota_refusal(exc) and waits < QUOTA_WAITS:
+                waits += 1
+                time.sleep(QUOTA_SLEEP * (0.5 + random.random()))
+                continue
+            if cap and cap_refusal(exc):
+                UNCAPPED.add(llm.name)
+                continue
+            errors += 1
+            if errors >= ATTEMPTS:
                 raise
-            time.sleep(10 * (attempt + 1))
+            time.sleep(RETRY_SLEEP * errors)
 
 
 @kbench.task(name='MemoryTrap Item', store_task=False, store_run=False)

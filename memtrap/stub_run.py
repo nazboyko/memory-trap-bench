@@ -52,12 +52,15 @@ class StubLLM(LLMChat):
         self.calls: Counter = Counter()  # calls per item prompt
         self.caps: list = []  # the max_tokens of every call
         self.last_messages: list = []  # the last message of every call
+        self.history_lengths: list = []  # how many messages every call carried
+        self.refusals = 2  # quota refusals per item in "quota" mode; None refuses forever
 
-    def reply_for(self, item: dict | None) -> str:
-        if self.mode == "garbage" or item is None:
+    def reply_for(self, item: dict | None, mode: str | None = None) -> str:
+        mode = mode or self.mode
+        if mode == "garbage" or item is None:
             return "I would need to run the code to know."
         truth = item["truth"]
-        if self.mode == "correct":
+        if mode == "correct":
             answer = truth["cold_answer"] if item["version"] is None else truth["versions"][item["version"]]["answer"]
             version = item["version"] or item["case"]["versions"][-1]
             reply = {
@@ -89,9 +92,10 @@ class StubLLM(LLMChat):
                 n = self.calls[item["prompt"] if item else last]
                 self.caps.append(kwargs.get("max_tokens"))
                 self.last_messages.append(last)
+                self.history_lengths.append(len(texts))
             if self.mode == "down":
                 raise RuntimeError("Connection error.")
-            if self.mode == "quota" and n <= 2:
+            if self.mode == "quota" and (self.refusals is None or n <= self.refusals):
                 raise RuntimeError(QUOTA_MESSAGE)
             if self.mode == "badcap" and "max_tokens" in kwargs:
                 raise RuntimeError("Error code: 400 - {'message': 'max_tokens is too large for this model'}")
@@ -110,11 +114,7 @@ class StubLLM(LLMChat):
         return LLMResponse(content=self.reply_for(self.by_prompt.get(last)), meta={"input_tokens": 0})
 
     def correct_reply(self, item: dict | None) -> str:
-        mode, self.mode = self.mode, "correct"
-        try:
-            return self.reply_for(item)
-        finally:
-            self.mode = mode
+        return self.reply_for(item, "correct")
 
 
 def load_task(path: Path, function: str) -> dict:

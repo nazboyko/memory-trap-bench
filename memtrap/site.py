@@ -14,7 +14,7 @@ import json
 import sys
 from collections import Counter
 
-from memtrap.analyze import load_runs, score_run
+from memtrap.analyze import choose_runs, load_runs
 from memtrap.catalog import ROOT, active_cases, load_cases, load_truth, version_label
 
 OUT = ROOT / "docs" / "index.html"
@@ -26,13 +26,12 @@ def model_picks(cases: list[dict], truth: dict) -> dict:
     runs_root = ROOT / "results" / "kaggle"
     if not runs_root.exists():
         return {}
-    newest, _ = load_runs(runs_root)
+    chosen = choose_runs(load_runs(runs_root), cases, truth)
     picks: dict = {}
-    for (cond, model), entry in sorted(newest.items()):
-        if cond != "cold":
+    for (cond, model), entry in sorted(chosen.items()):
+        if cond != "cold" or not entry["complete"]:
             continue
-        rows, _ = score_run(entry, cases, truth)
-        for r in rows:
+        for r in entry["rows"]:
             picks.setdefault(r["case"], []).append({"model": model, "answer": r["answer"], "ok": r["answer_ok"]})
     return picks
 

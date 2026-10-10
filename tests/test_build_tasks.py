@@ -110,7 +110,7 @@ def test_repair_turn_and_final_json_are_scored(tmp_path, monkeypatch):
         assert s["task_score"] == 1.0 and s["parse_failures"] == 0, mode
 
 
-def failing_stub_run(tmp_path, monkeypatch, mode):
+def failing_stub_run(tmp_path, monkeypatch, mode, refusals=2):
     from memtrap.stub_run import StubLLM, load_task
 
     monkeypatch.chdir(tmp_path)
@@ -118,17 +118,28 @@ def failing_stub_run(tmp_path, monkeypatch, mode):
     namespace = load_task(OUT_DIR / spec["file"], spec["function"])
     namespace["QUOTA_SLEEP"] = namespace["RETRY_SLEEP"] = 0
     stub = StubLLM(mode, namespace["ITEMS"])
+    stub.refusals = refusals
     run = namespace[spec["function"]].run(stub)
     return namespace, stub, run
 
 
 def test_quota_refusals_are_waited_out(tmp_path, monkeypatch):
-    namespace, stub, run = failing_stub_run(tmp_path, monkeypatch, "quota")
+    # More refusals than ATTEMPTS: only the wait path can get a reply.
+    namespace, stub, run = failing_stub_run(tmp_path, monkeypatch, "quota", refusals=5)
+    assert namespace["ATTEMPTS"] < 5 < namespace["QUOTA_WAITS"]
     assert run.result == 1.0
-    assert set(stub.calls.values()) == {3}  # two refusals, then the reply
+    assert set(stub.calls.values()) == {6}  # five refusals, then the reply
     assert set(stub.caps) == {namespace["MAX_OUTPUT_TOKENS"]}
-    # A retry asks for a reply to the same history; the question is never sent twice.
+    # A retry asks for a reply to the same history: the question is in it once.
     assert set(stub.last_messages) == set(stub.by_prompt)
+    assert set(stub.history_lengths) == {1}
+
+
+def test_a_spent_quota_gives_up_and_keeps_the_cap(tmp_path, monkeypatch):
+    namespace, stub, run = failing_stub_run(tmp_path, monkeypatch, "quota", refusals=None)
+    assert run.result == 0.0
+    assert set(stub.calls.values()) == {namespace["QUOTA_WAITS"] + namespace["ATTEMPTS"]}
+    assert stub.name not in namespace["UNCAPPED"]
 
 
 def test_a_refused_output_cap_is_dropped_for_that_model(tmp_path, monkeypatch):
@@ -136,6 +147,7 @@ def test_a_refused_output_cap_is_dropped_for_that_model(tmp_path, monkeypatch):
     assert run.result == 1.0
     assert stub.name in namespace["UNCAPPED"]
     assert stub.caps.count(None) >= len(namespace["ITEMS"])
+    assert set(stub.history_lengths) == {1}
 
 
 def test_a_dead_proxy_gives_up_after_three_errors(tmp_path, monkeypatch):

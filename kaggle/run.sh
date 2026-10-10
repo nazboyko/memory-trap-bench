@@ -7,6 +7,7 @@
 #     sh kaggle/run.sh run        # every model on every task, waits
 #     sh kaggle/run.sh download   # run files into results/kaggle/<condition>/
 #     sh kaggle/run.sh publish    # make the three tasks public
+#     sh kaggle/run.sh quota      # the account's model proxy quota, in USD
 #
 # push, run, download and publish take a condition as a second argument to
 # handle one task: sh kaggle/run.sh run cold
@@ -26,6 +27,9 @@ MODELS=${MODELS:-"claude-opus-5-5-default gpt-6.1-sol gemini-3.1-pro-preview cla
 gemini-3.8-flash gemini-2.5-flash claude-haiku-4-5-20251001 gpt-5.4-nano-2026-03-17
 gemini-3.5-flash-lite gpt-oss-120b gemma-4-31b-it qwen3-coder-480b-a35b-instruct"}
 BATCH=${BATCH:-4}
+case $BATCH in
+    '' | *[!0-9]* | 0) echo "BATCH must be a positive integer" >&2; exit 2 ;;
+esac
 PILOT_MODELS="gemini-3.5-flash-lite gpt-5.4-nano-2026-03-17"
 ALL_TASKS="cold:memorytrap-cold versioned:memorytrap-versioned evidence:memorytrap-evidence"
 WAIT=7200
@@ -49,7 +53,7 @@ model_flags() {
 available_models() {
     list=$(kaggle b t models)
     for m in $1; do
-        if printf '%s\n' "$list" | awk '{print $1}' | grep -qx "$m"; then
+        if printf '%s\n' "$list" | awk '{print $1}' | grep -qxF "$m"; then
             printf '%s ' "$m"
         else
             echo "skipping $m: not in kaggle b t models" >&2
@@ -75,8 +79,13 @@ push() {
 # Each batch of models goes through every task before the next batch starts,
 # so a model has all its conditions before the quota is spent on the next one.
 run() {
-    # shellcheck disable=SC2046
-    set -- $(available_models "$MODELS")
+    models=$(available_models "$MODELS")
+    if [ -z "$models" ]; then
+        echo "no model to run: none of the slugs is in kaggle b t models" >&2
+        exit 1
+    fi
+    # shellcheck disable=SC2086
+    set -- $models
     while [ $# -gt 0 ]; do
         batch=""
         n=0
@@ -104,6 +113,11 @@ download() {
     done
 }
 
+# CLI 2.2.4 has no quota command; its own interpreter can ask the SDK.
+quota() {
+    "$(head -1 "$(command -v kaggle)" | sed 's/^#!//')" kaggle/quota.py
+}
+
 publish() {
     for pair in $TASKS; do
         kaggle b t publish "${pair#*:}"
@@ -116,6 +130,7 @@ case "${1:-}" in
     run) run ;;
     download) download ;;
     publish) publish ;;
+    quota) quota ;;
     all) pilot; push; run; download ;;
     *) sed -n '2,22p' "$0"; exit 2 ;;
 esac

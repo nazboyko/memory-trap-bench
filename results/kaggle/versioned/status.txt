@@ -7,6 +7,7 @@ Task URL: https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-versioned/2
 
 Model                          Status          Started             Ended              
 ────────────────────────────── ─────────────── ─────────────────── ───────────────────
+gemini-2.5-flash               Completed       2026-10-10 02:13:29 2026-10-10 02:15:56
 gpt-oss-120b                   Completed       2026-10-10 01:58:16 2026-10-10 02:00:40
 gpt-5.4-nano-2026-03-17        Completed       2026-10-10 01:58:10 2026-10-10 01:58:19
 gemini-3.5-flash-lite          Completed       2026-10-10 01:58:17 2026-10-10 01:58:23

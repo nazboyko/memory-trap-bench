@@ -1,0 +1,17 @@
+{
+  "read_at": "2026-10-10T02:23:18+00:00",
+  "quotas": [
+    {
+      "period": "daily",
+      "used_usd": 8.4211,
+      "allowed_usd": 10,
+      "refill_time_utc": "2026-10-11T00:44:50.873000"
+    },
+    {
+      "period": "monthly",
+      "used_usd": 8.4211,
+      "allowed_usd": 100,
+      "refill_time_utc": "2026-11-09T00:44:50.872000"
+    }
+  ]
+}

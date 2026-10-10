@@ -244,3 +244,19 @@ def test_baseline_file_is_consistent_and_reported(stub_runs, tmp_path):
     assert f"| author | {real['score']:.2f} | {real['answers_right']} of {n} | {real['mechanisms_right']} of {n} |" in section
     # The correct stub is above the author, the garbage stub below.
     assert "next above: `stub-correct` 1.00" in section and "next below:" in section
+
+
+@pytest.mark.parametrize("change", [
+    lambda b: b.pop("mechanisms_right"),
+    lambda b: b.__setitem__("cases", 0),
+    lambda b: b.__setitem__("answers_right", 99),
+    lambda b: b.__setitem__("version_split_cases", {"cases": ["P1"]}),
+])
+def test_a_broken_baseline_file_is_named_in_the_error(tmp_path, change):
+    from memtrap.analyze import BASELINE_FILE, load_baseline
+
+    b = json.loads((ROOT / "results" / BASELINE_FILE).read_text())
+    change(b)
+    (tmp_path / BASELINE_FILE).write_text(json.dumps(b))
+    with pytest.raises(ValueError, match=BASELINE_FILE):
+        load_baseline(tmp_path)

@@ -625,7 +625,16 @@ def load_baseline(results_dir: Path) -> dict | None:
         return None
     with open(path) as fh:
         b = json.load(fh)
-    b["computed_score"] = (b["answers_right"] + b["mechanisms_right"] + b["estimates_in_tolerance"]) / (3 * b["cases"])
+    counts = ("answers_right", "mechanisms_right", "estimates_in_tolerance")
+    for key in ("cases", *counts, "mean_confidence_right", "mean_confidence_wrong"):
+        if not isinstance(b.get(key), (int, float)) or isinstance(b.get(key), bool):
+            raise ValueError(f"results/{BASELINE_FILE}: {key} is missing or not a number")
+    if b["cases"] <= 0 or any(not 0 <= b[key] <= b["cases"] for key in counts):
+        raise ValueError(f"results/{BASELINE_FILE}: the counts do not fit {b['cases']} cases")
+    split = b.get("version_split_cases")
+    if split is not None and not {"cases", "answered_for_one_version", "mechanisms_right"} <= set(split):
+        raise ValueError(f"results/{BASELINE_FILE}: version_split_cases is incomplete")
+    b["computed_score"] = sum(b[key] for key in counts) / (3 * b["cases"])
     return b
 
 

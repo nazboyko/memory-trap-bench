@@ -225,3 +225,22 @@ def test_quotes_file_is_verbatim_and_short_first(stub_runs, tmp_path):
     # The report writes the file next to itself.
     build_report(cases, truth, load_runs(stub_runs), stub_runs, tmp_path, None)
     assert (tmp_path / "quotes.md").exists()
+
+
+def test_baseline_file_is_consistent_and_reported(stub_runs, tmp_path):
+    from memtrap.analyze import BASELINE_FILE, load_baseline
+
+    real = load_baseline(ROOT / "results")
+    assert real is not None and real["condition"] == "cold" and real["cases"] == N_CASES
+    assert round(real["computed_score"], 2) == real["score"]
+    assert load_baseline(tmp_path) is None
+    cases, truth = load_cases(), load_truth()
+    plain = build_report(cases, truth, load_runs(stub_runs), stub_runs, tmp_path, None)
+    assert "is not read by this report" in plain.split("## 10. Human baseline")[1].split("## 11.")[0]
+    (tmp_path / BASELINE_FILE).write_text((ROOT / "results" / BASELINE_FILE).read_text())
+    text = build_report(cases, truth, load_runs(stub_runs), stub_runs, tmp_path, None)
+    section = text.split("## 10. Human baseline")[1].split("## 11.")[0]
+    n = real["cases"]
+    assert f"| author | {real['score']:.2f} | {real['answers_right']} of {n} | {real['mechanisms_right']} of {n} |" in section
+    # The correct stub is above the author, the garbage stub below.
+    assert "next above: `stub-correct` 1.00" in section and "next below:" in section

@@ -273,7 +273,15 @@ Both right in 2 of 36 runs: `gemini-3.5-flash-lite` (cold), `gemini-3.5-flash-li
 
 ## 10. Human baseline
 
-One developer answered the cold condition before seeing any measurement. The score is computed by `uv run python -m memtrap.score_human human/answers.json` and is not read by this report.
+One developer, the author, answered the cold condition before seeing any measurement. The numbers are in `results/human_baseline.json` as the author reported them, scored with `uv run python -m memtrap.score_human human/answers.json`; the answers file is not in the repository and this report does not read it.
+
+| who | cold score | answers right | mechanisms right | estimates within tolerance | mean confidence when right | when wrong |
+|---|---|---|---|---|---|---|
+| author | 0.67 | 10 of 17 | 14 of 17 | 10 of 17 | 80.5 | 70.0 |
+
+Cold task scores of the models around it: next above: `gemma-4-31b-it` 0.69; level: `gemini-2.5-flash` 0.67; next below: `claude-haiku-4-5-20251001` 0.57.
+
+On the 4 cases whose measured cold answer is "it depends on the version" (P1, P4, P8, G3), the author answered for one version on 4 and picked the right mechanism on 3.
 
 ## 11. Folklore in the models' own words
 

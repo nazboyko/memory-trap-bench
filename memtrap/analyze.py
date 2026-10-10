@@ -613,6 +613,54 @@ def control_quote_rows(rows_all: dict, order: list[str], cases: list[dict], per_
     return out
 
 
+BASELINE_FILE = "human_baseline.json"
+
+
+def load_baseline(results_dir: Path) -> dict | None:
+    """The author's own cold score, as the author reported it: counts of right
+    answers, mechanisms and estimates. The answers themselves stay out of the
+    repository and are never read here."""
+    path = results_dir / BASELINE_FILE
+    if not path.exists():
+        return None
+    with open(path) as fh:
+        b = json.load(fh)
+    b["computed_score"] = (b["answers_right"] + b["mechanisms_right"] + b["estimates_in_tolerance"]) / (3 * b["cases"])
+    return b
+
+
+def baseline_section(baseline: dict | None, rows_by: dict) -> list[str]:
+    head = ["## 10. Human baseline", ""]
+    if baseline is None:
+        return head + ["One developer answered the cold condition before seeing any measurement. The score is computed by "
+                       "`uv run python -m memtrap.score_human human/answers.json` and is not read by this report.", ""]
+    n = baseline["cases"]
+    cold = sorted(((summarize(rows)["score"], m) for (cond, m), rows in rows_by.items() if cond == "cold"), reverse=True)
+    above = [f"`{m}` {fmt(s)}" for s, m in cold if s > baseline["computed_score"] + 1e-9][-1:]
+    level = [f"`{m}` {fmt(s)}" for s, m in cold if abs(s - baseline["computed_score"]) <= 1e-9]
+    below = [f"`{m}` {fmt(s)}" for s, m in cold if s < baseline["computed_score"] - 1e-9][:1]
+    split = baseline.get("version_split_cases") or {}
+    out = head + [
+        "One developer, the author, answered the cold condition before seeing any measurement. The numbers are in "
+        f"`results/{BASELINE_FILE}` as the author reported them, scored with "
+        "`uv run python -m memtrap.score_human human/answers.json`; the answers file is not in the repository and "
+        "this report does not read it.", "",
+        table(["who", "cold score", "answers right", "mechanisms right", "estimates within tolerance",
+               "mean confidence when right", "when wrong"],
+              [["author", fmt(baseline["computed_score"]), f"{baseline['answers_right']} of {n}",
+                f"{baseline['mechanisms_right']} of {n}", f"{baseline['estimates_in_tolerance']} of {n}",
+                fmt(baseline["mean_confidence_right"], 1), fmt(baseline["mean_confidence_wrong"], 1)]]), ""]
+    if cold:
+        near = "; ".join(x for x in ("next above: " + above[0] if above else "", "level: " + ", ".join(level) if level else "",
+                                     "next below: " + below[0] if below else "") if x)
+        out += [f"Cold task scores of the models around it: {near}.", ""]
+    if split:
+        out += [f"On the {len(split['cases'])} cases whose measured cold answer is \"it depends on the version\" "
+                f"({', '.join(split['cases'])}), the author answered for one version on {split['answered_for_one_version']} "
+                f"and picked the right mechanism on {split['mechanisms_right']}.", ""]
+    return out
+
+
 def quotes_file(rows_all: dict, order: list[str], cases: list[dict], truth: dict, per_case: int = 3) -> str:
     """results/quotes.md: per case, the shortest reasonings that chose the
     folklore mechanism (for a control: that answered it wrong), verbatim."""
@@ -891,9 +939,7 @@ def build_report(cases, truth, entries, runs_root: Path, out_dir: Path, banner: 
                           counts[cond][(False, True)], counts[cond][(False, False)]] for cond in CONDITIONS]), "",
                   f"Both right in {len(both)} of {total} runs" + (": " + ", ".join(both) if both else "") + ".", ""]
 
-    parts += ["## 10. Human baseline", "",
-              "One developer answered the cold condition before seeing any measurement. The score is computed by "
-              "`uv run python -m memtrap.score_human human/answers.json` and is not read by this report.", ""]
+    parts += baseline_section(load_baseline(out_dir), rows_by)
 
     q = quote_rows(rows_all, cases)
     parts += ["## 11. Folklore in the models' own words", "",

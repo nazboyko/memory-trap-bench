@@ -1,0 +1,17 @@
+{
+  "who": "the author, one developer",
+  "source": "Reported by the author. Scored with `uv run python -m memtrap.score_human human/answers.json` from answers written before any measurement was seen; the answers file is not in the repository.",
+  "condition": "cold",
+  "cases": 17,
+  "answers_right": 10,
+  "mechanisms_right": 14,
+  "estimates_in_tolerance": 10,
+  "score": 0.67,
+  "mean_confidence_right": 80.5,
+  "mean_confidence_wrong": 70.0,
+  "version_split_cases": {
+    "cases": ["P1", "P4", "P8", "G3"],
+    "answered_for_one_version": 4,
+    "mechanisms_right": 3
+  }
+}

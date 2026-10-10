@@ -4,17 +4,7 @@ Seventeen memory questions about PHP arrays, Go maps and goroutine stacks, asked
 to language models and scored against numbers measured on pinned runtime
 versions.
 
-![Measured memory ratio by runtime version for P1, P4 and G3](results/charts/split_cases.png)
-
-PHP and Go developers carry rules of thumb about memory, and the runtimes
-changed under several of them. On PHP 8.1 an array of one million integers
-built in reverse order takes 1.25 times the memory of the same numbers from
-`range()`; on PHP 8.3 it takes 2.50 times, because packed arrays stopped
-storing keys in PHP 8.2. The benchmark asks whether a model knows the rule,
-the runtime, or the version.
-
-Guess first, then see the measurement:
-[nazboyko.github.io/memory-trap-bench](https://nazboyko.github.io/memory-trap-bench/).
+![Mean task score per model, from gpt-6.1-sol at 0.95 to gpt-5.4-nano-2026-03-17 at 0.39, with the author's cold score of 0.67 as a dashed line](docs/img/leaderboard.png)
 
 Twelve models have a complete run on the three Kaggle tasks
 ([memorytrap-cold](https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-cold),
@@ -24,6 +14,18 @@ Twelve models have a complete run on the three Kaggle tasks
 both lose the same control in all three tasks: they say a new idle goroutine
 starts at 16 KB once the runtime has seen big stacks, where the harness
 measured 2.0 KB. Every table is in [results/REPORT.md](results/REPORT.md).
+
+Guess first, then see the measurement:
+[nazboyko.github.io/memory-trap-bench](https://nazboyko.github.io/memory-trap-bench/).
+
+PHP and Go developers carry rules of thumb about memory, and the runtimes
+changed under several of them. On PHP 8.1 an array of one million integers
+built in reverse order takes 1.25 times the memory of the same numbers from
+`range()`; on PHP 8.3 it takes 2.50 times, because packed arrays stopped
+storing keys in PHP 8.2. The benchmark asks whether a model knows the rule,
+the runtime, or the version.
+
+![Measured memory ratio by runtime version for P1, P4 and G3](results/charts/split_cases.png)
 
 ## The cases
 
@@ -118,6 +120,8 @@ uv run python -m memtrap.build_tasks
 uv run python -m memtrap.stub_run
 sh kaggle/run.sh all
 uv run python -m memtrap.analyze
+uv run python -m memtrap.site
+uv run python -m memtrap.images
 ```
 
 `build_tasks` writes the three task files under [kaggle/](kaggle/) from the
@@ -127,7 +131,9 @@ scoring. `kaggle/run.sh` pushes the tasks, runs the model lineup in batches,
 and downloads the run files into `results/kaggle/`. `analyze` rescores every
 raw reply and writes [results/REPORT.md](results/REPORT.md). A push creates a
 new task version, and Kaggle then lists and downloads only the runs of that
-version, so download before you push again.
+version, so download before you push again. `site` writes the guess-first
+page and `images` the three pictures under [docs/img/](docs/img/), both from
+the same run files.
 
 ## Models and results
 
@@ -152,6 +158,7 @@ Task score per condition, one complete run per model and task, from
 | `gemini-3.7-flash` | 0.80 | 0.81 | 0.78 | 0.80 |
 | `gemma-4-31b-it` | 0.69 | 0.70 | 0.71 | 0.70 |
 | `gemini-2.5-flash` | 0.67 | 0.68 | 0.65 | 0.67 |
+| author, cold only | 0.67 | | | |
 | `gpt-oss-120b` | 0.53 | 0.57 | 0.56 | 0.55 |
 | `claude-haiku-4-5-20251001` | 0.57 | 0.51 | 0.48 | 0.52 |
 | `gemini-3.5-flash-lite` | 0.51 | 0.49 | 0.49 | 0.50 |
@@ -159,11 +166,15 @@ Task score per condition, one complete run per model and task, from
 | `gpt-5.4-nano-2026-03-17` | 0.37 | 0.35 | 0.44 | 0.39 |
 
 `gemini-3.1-pro-preview` has no complete run yet and is not ranked; its
-partial replies are in [results/kaggle/](results/kaggle/).
+partial replies are in [results/kaggle/](results/kaggle/). The row without a
+slug is my own cold score, answered before I saw any measurement: 10 of 17
+answers, 14 of 17 mechanisms and 10 of 17 estimates
+([results/human_baseline.json](results/human_baseline.json)). It is the dashed
+line in the chart at the top.
 
 ![Case score per model, cold condition](results/charts/heatmap_cold.png)
 
-What the report shows beyond the table:
+More from the report:
 
 - **R4 and R6.** The same idle goroutines measure 2.0 KB each while the
   big-stack goroutines are alive (R4, a control) and 16.0 KB after they have
@@ -213,15 +224,19 @@ the quota, which CLI 2.2.4 does not.
   versions in CI.
 - The PHP packed-array change measured between 8.1 and 8.2 is
   [php-src pull request 7491](https://github.com/php/php-src/pull/7491) by
-  Dmitry Stogov ("Store just an array of zvals without keys").
+  Dmitry Stogov, "Use more compact representation for packed arrays", which
+  stores an array of zvals without keys.
 - [Go 1.24 release notes](https://go.dev/doc/go1.24#runtime) (the map
   implementation based on Swiss Tables) and
   [Go 1.19 release notes](https://go.dev/doc/go1.19#runtime) (initial
   goroutine stacks sized from historic average stack usage).
-- The Go runtime source, [runtime/proc.go](https://go.dev/src/runtime/proc.go):
-  a new goroutine gets the minimum stack (`malg(stackMin)`), and a reused
-  descriptor gets the adaptive size (`startingStackSize` in `gfget`), which
-  is what R4 and R6 measure.
+- The Go runtime source, `runtime/proc.go`:
+  [`newproc1`](https://go.dev/src/runtime/proc.go#L5352) gives a new goroutine
+  the minimum stack (`malg(stackMin)`), and
+  [`gfget`](https://go.dev/src/runtime/proc.go#L5558) gives a reused descriptor
+  the adaptive size (`startingStackSize`), which is what R4 and R6 measure. The
+  links show the current release, Go 1.27; Go 1.23 to 1.26 have the same two
+  lines.
 
 ## Contest
 

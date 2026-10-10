@@ -1846,6 +1846,7 @@ dependencies = [
     { name = "kaggle-benchmarks" },
     { name = "matplotlib" },
     { name = "pandas" },
+    { name = "pillow" },
 ]
 
 [package.dev-dependencies]
@@ -1858,6 +1859,7 @@ requires-dist = [
     { name = "kaggle-benchmarks", specifier = ">=0.6.1" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "pandas", specifier = ">=3.0.6" },
+    { name = "pillow", specifier = ">=12.3.0" },
 ]
 
 [package.metadata.requires-dev]

@@ -9,6 +9,7 @@ dependencies = [
     "kaggle-benchmarks>=0.6.1",
     "matplotlib>=3.11.2",
     "pandas>=3.0.6",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]

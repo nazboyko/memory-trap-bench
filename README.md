@@ -16,8 +16,14 @@ the runtime, or the version.
 Guess first, then see the measurement:
 [nazboyko.github.io/memory-trap-bench](https://nazboyko.github.io/memory-trap-bench/).
 
-Model results come from three Kaggle Benchmarks tasks. They are pending until
-the Kaggle runs finish; see [results/REPORT.md](results/REPORT.md).
+Twelve models have a complete run on the three Kaggle tasks
+([memorytrap-cold](https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-cold),
+[memorytrap-versioned](https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-versioned),
+[memorytrap-evidence](https://www.kaggle.com/benchmarks/tasks/nb9300/memorytrap-evidence)).
+`gpt-6.1-sol` scores 0.95 and `claude-opus-5-5-default` 0.94 on average, and
+both lose the same control in all three tasks: they say a new idle goroutine
+starts at 16 KB once the runtime has seen big stacks, where the harness
+measured 2.0 KB. Every table is in [results/REPORT.md](results/REPORT.md).
 
 ## The cases
 
@@ -117,11 +123,13 @@ uv run python -m memtrap.analyze
 `build_tasks` writes the three task files under [kaggle/](kaggle/) from the
 catalog and the truth. `stub_run` runs them offline against three fake models
 (always right, always the rule of thumb, never JSON) as a check of parsing and
-scoring. `kaggle/run.sh` pushes the tasks, runs the model lineup, and
-downloads the run files into `results/kaggle/`. `analyze` rescores every raw
-reply and writes [results/REPORT.md](results/REPORT.md).
+scoring. `kaggle/run.sh` pushes the tasks, runs the model lineup in batches,
+and downloads the run files into `results/kaggle/`. `analyze` rescores every
+raw reply and writes [results/REPORT.md](results/REPORT.md). A push creates a
+new task version, and Kaggle then lists and downloads only the runs of that
+version, so download before you push again.
 
-## Models
+## Models and results
 
 Twelve models from Kaggle's model list, on three axes: a small and a flagship
 model per vendor, a newer against an older generation of the same vendor, and
@@ -129,16 +137,69 @@ open weights: `gemini-3.5-flash-lite`, `gemini-3.8-flash`,
 `gemini-3.1-pro-preview`, `gemini-2.5-flash`, `claude-haiku-5-5`,
 `claude-opus-5-5-default`, `claude-haiku-4-5-20251001`,
 `gpt-5.4-nano-2026-03-17`, `gpt-6.1-sol`, `gpt-oss-120b`, `gemma-4-31b-it`,
-`qwen3-coder-480b-a35b-instruct`.
+`qwen3-coder-480b-a35b-instruct`. Kaggle also runs every task once on
+`gemini-3.7-flash` when the task is created; those runs are kept.
+
+Task score per condition, one complete run per model and task, from
+[results/REPORT.md](results/REPORT.md) section 2:
+
+| model | cold | versioned | evidence | mean |
+|---|---|---|---|---|
+| `gpt-6.1-sol` | 0.94 | 0.95 | 0.95 | 0.95 |
+| `claude-opus-5-5-default` | 0.90 | 0.95 | 0.95 | 0.94 |
+| `gemini-3.8-flash` | 0.84 | 0.86 | 0.79 | 0.83 |
+| `claude-haiku-5-5` | 0.78 | 0.83 | 0.81 | 0.81 |
+| `gemini-3.7-flash` | 0.80 | 0.81 | 0.78 | 0.80 |
+| `gemma-4-31b-it` | 0.69 | 0.70 | 0.71 | 0.70 |
+| `gemini-2.5-flash` | 0.67 | 0.68 | 0.65 | 0.67 |
+| `gpt-oss-120b` | 0.53 | 0.57 | 0.56 | 0.55 |
+| `claude-haiku-4-5-20251001` | 0.57 | 0.51 | 0.48 | 0.52 |
+| `gemini-3.5-flash-lite` | 0.51 | 0.49 | 0.49 | 0.50 |
+| `qwen3-coder-480b-a35b-instruct` | 0.41 | 0.44 | 0.52 | 0.46 |
+| `gpt-5.4-nano-2026-03-17` | 0.37 | 0.35 | 0.44 | 0.39 |
+
+`gemini-3.1-pro-preview` has no complete run yet and is not ranked; its
+partial replies are in [results/kaggle/](results/kaggle/).
+
+![Case score per model, cold condition](results/charts/heatmap_cold.png)
+
+What the report shows beyond the table:
+
+- **R4 and R6.** The same idle goroutines measure 2.0 KB each while the
+  big-stack goroutines are alive (R4, a control) and 16.0 KB after they have
+  exited (R6). Over 36 runs a model got both right in 2 (section 9).
+- **Version sensitivity.** Four cases change their measured answer with the
+  version. Two models followed all four; six followed none (section 6).
+- **"It depends on the version"** was picked in 13 of 48 cold replies where it
+  is the measured answer (section 6).
+- **Confidence.** Seven of the twelve models put a confidence of 80 or more
+  on every wrong answer they gave (section 5).
+- **The same question twice.** Over 501 pairs of replies to the same prompt,
+  the answer matched in 82% (section 12).
+
+### The quota
+
+Kaggle's model proxy reserves the worst-case cost of every call (the model's
+maximum output at its output price) against a daily quota, 10 USD for this
+account ([results/kaggle/quota.json](results/kaggle/quota.json)). The first
+pass started twelve models at once and 160 questions were refused; those run
+files are kept under `results/kaggle/*/memorytrap-*/1/`. Task version 2 sends
+`max_tokens=32768` with every call and waits out a refused reservation, and
+`kaggle/run.sh` runs four models at a time. `sh kaggle/run.sh quota` prints
+the quota, which CLI 2.2.4 does not.
 
 ## Limits
 
-- Seventeen cases, one run per model and condition.
+- Seventeen cases, one scored run per model and condition. Most models also
+  have replies from the partial first pass; the report compares the two.
+- `gemini-3.1-pro-preview` has no complete run.
 - One machine type per version (GitHub's ubuntu-24.04 runner). Other builds,
   allocators and architectures can give other numbers; the local Go 1.26
   readings on darwin/arm64 are kept as a cross-check.
 - The `kaggle-benchmarks` library sends no temperature through the Kaggle
   model proxy (`support_temperature` is False there), so a rerun can differ.
+- Every call of task version 2 carries `max_tokens=32768`. The longest reply
+  in any run file used 22,329 output tokens.
 - The estimate tolerance (0.67x to 1.5x) is wide on purpose; the answer and
   the mechanism carry two thirds of the score.
 - The human baseline is one developer.
@@ -157,6 +218,10 @@ open weights: `gemini-3.5-flash-lite`, `gemini-3.8-flash`,
   implementation based on Swiss Tables) and
   [Go 1.19 release notes](https://go.dev/doc/go1.19#runtime) (initial
   goroutine stacks sized from historic average stack usage).
+- The Go runtime source, [runtime/proc.go](https://go.dev/src/runtime/proc.go):
+  a new goroutine gets the minimum stack (`malg(stackMin)`), and a reused
+  descriptor gets the adaptive size (`startingStackSize` in `gfget`), which
+  is what R4 and R6 measure.
 
 ## Contest
 

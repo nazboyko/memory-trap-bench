@@ -59,11 +59,11 @@ Run files of the three tasks: 71. Scored: 36 complete runs (task version 2), one
 
 Model and condition pairs with no complete run yet. They are not ranked and not used in the sections below; a score over the items that happened to get through would not be comparable.
 
-| model | condition | task version | items answered | refused on quota |
-|---|---|---|---|---|
-| `gemini-3.1-pro-preview` | cold | 1 | 13 of 17 | 4 |
-| `gemini-3.1-pro-preview` | versioned | 1 | 8 of 21 | 13 |
-| `gemini-3.1-pro-preview` | evidence | 1 | 1 of 21 | 20 |
+| model | condition | task version | items answered | refused on quota | cost, USD | longest reply |
+|---|---|---|---|---|---|---|
+| `gemini-3.1-pro-preview` | cold | 1 | 13 of 17 | 4 | 0.886 | 14,300 |
+| `gemini-3.1-pro-preview` | versioned | 1 | 8 of 21 | 13 | 0.860 | 22,064 |
+| `gemini-3.1-pro-preview` | evidence | 1 | 1 of 21 | 20 | 0.102 | 8,349 |
 
 ### Output and cost of the scored runs
 
@@ -132,6 +132,8 @@ Confidently wrong = wrong answer with stated confidence of 80 or more.
 
 ![confidence](charts/confidence.png)
 
+Models that put 80 or more on every wrong answer they gave: 7 of 12 (`gpt-6.1-sol`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemma-4-31b-it`, `gemini-2.5-flash`, `gemini-3.5-flash-lite`, `qwen3-coder-480b-a35b-instruct`).
+
 ## 6. Version sensitivity
 
 Versioned condition, the cases whose measured answer differs between the two versions asked. Tracks = both version answers correct.
@@ -191,6 +193,8 @@ Per model, split cases tracked (of 4): `gpt-6.1-sol` 4, `claude-opus-5-5-default
 
 Per case, models that tracked it: G3 2 of 12, P1 4 of 12, P4 6 of 12, P8 5 of 12.
 
+Cold condition, the same cases without a version in the prompt, where the measured answer is "it depends on the version". Models that picked it: P1 2 of 12, P4 5 of 12, P8 1 of 12, G3 5 of 12; 13 of 48 replies in all.
+
 ## 7. Evidence update
 
 Per case, answer correctness moving from cold (or versioned) to evidence. Net = gained minus lost.
@@ -209,6 +213,8 @@ Per case, answer correctness moving from cold (or versioned) to evidence. Net = 
 | `gemini-3.5-flash-lite` | 1 | 1 | 0 | 2 | 2 |
 | `qwen3-coder-480b-a35b-instruct` | 1 | 0 | 1 | 2 | 1 |
 | `gpt-5.4-nano-2026-03-17` | 3 | 1 | 2 | 3 | 1 |
+
+All models, cold to evidence: 14 answers gained, 14 lost. Versioned to evidence: 10 gained, 15 lost.
 
 ## 8. Folklore index
 

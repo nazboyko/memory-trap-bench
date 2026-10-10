@@ -167,7 +167,7 @@ def test_an_incomplete_run_is_listed_and_not_ranked(stub_runs, tmp_path):
     text = build_report(cases, truth, load_runs(tmp_path), tmp_path, out, None)
     assert "| `whole` | 1.00 | n/a | n/a | n/a | 0 |" in text
     assert text.count("`holes`") == 1
-    assert f"| `holes` | cold | 2 | {N_CASES - 4} of {N_CASES} | 0 |" in text
+    assert f"| `holes` | cold | 2 | {N_CASES - 4} of {N_CASES} | 0 | 0.000 | 0 |" in text
 
 
 def test_versioned_to_evidence_is_not_zero_without_a_versioned_run(stub_runs, tmp_path):

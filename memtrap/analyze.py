@@ -721,10 +721,12 @@ def build_report(cases, truth, entries, runs_root: Path, out_dir: Path, banner: 
         inc_rows = []
         for (cond, model), e in sorted(incomplete.items(), key=lambda kv: (kv[0][1], CONDITIONS.index(kv[0][0]))):
             inc_rows.append([f"`{model}`", cond, e["version"] or "n/a", f"{e['answered']} of {len(e['rows'])}",
-                             e["meta"]["quota_refused"]])
+                             e["meta"]["quota_refused"], f"{e['meta']['cost_usd']:.3f}",
+                             f"{e['meta']['max_output_tokens']:,}"])
         parts += ["Model and condition pairs with no complete run yet. They are not ranked and not used in the "
                   "sections below; a score over the items that happened to get through would not be comparable.", "",
-                  table(["model", "condition", "task version", "items answered", "refused on quota"], inc_rows), ""]
+                  table(["model", "condition", "task version", "items answered", "refused on quota", "cost, USD",
+                         "longest reply"], inc_rows), ""]
     else:
         parts += ["Every model and condition pair has a complete run.", ""]
 
@@ -774,6 +776,9 @@ def build_report(cases, truth, entries, runs_root: Path, out_dir: Path, banner: 
               "Confidently wrong = wrong answer with stated confidence of 80 or more.", "",
               table(["model", "mean confidence when right", "when wrong", "calibration gap", "wrong answers", "confidently wrong"], conf_rows),
               "", f"![confidence]({rel(chart_confidence(rows_all, order, charts))})", ""]
+    always = [r[0] for r in conf_rows if r[4] and r[4] == r[5]]
+    parts += [f"Models that put 80 or more on every wrong answer they gave: {len(always)} of {len(conf_rows)}"
+              + (" (" + ", ".join(always) + ")" if always else "") + ".", ""]
 
     vs = version_sensitivity(rows_by, order, cases, truth)
     parts += ["## 6. Version sensitivity", "",
@@ -795,6 +800,14 @@ def build_report(cases, truth, entries, runs_root: Path, out_dir: Path, banner: 
                               for c in sorted({v["case"] for v in vs})) + ".", ""]
     else:
         parts += ["No complete versioned run yet.", ""]
+    split_ids = [c["id"] for c in active_cases(cases) if truth[c["id"]]["version_split"]]
+    cold_runs = [rows for (cond, _), rows in rows_by.items() if cond == "cold"]
+    if split_ids and cold_runs:
+        picked = Counter(r["case"] for rows in cold_runs for r in rows if r["case"] in split_ids and r["answer_ok"])
+        parts += ["Cold condition, the same cases without a version in the prompt, where the measured answer is "
+                  "\"it depends on the version\". Models that picked it: "
+                  + ", ".join(f"{cid} {picked.get(cid, 0)} of {len(cold_runs)}" for cid in split_ids)
+                  + f"; {sum(picked.values())} of {len(split_ids) * len(cold_runs)} replies in all.", ""]
 
     eu = evidence_update(rows_by, order, cases)
     parts += ["## 7. Evidence update", "",
@@ -804,7 +817,11 @@ def build_report(cases, truth, entries, runs_root: Path, out_dir: Path, banner: 
                         [[f"`{e['model']}`", e["cold_to_evidence_gained"], e["cold_to_evidence_lost"], e["net"],
                           "n/a" if e["versioned_to_evidence_gained"] is None else e["versioned_to_evidence_gained"],
                           "n/a" if e["versioned_to_evidence_lost"] is None else e["versioned_to_evidence_lost"]]
-                         for e in eu]), ""]
+                         for e in eu]), "",
+                  f"All models, cold to evidence: {sum(e['cold_to_evidence_gained'] for e in eu)} answers gained, "
+                  f"{sum(e['cold_to_evidence_lost'] for e in eu)} lost. Versioned to evidence: "
+                  f"{sum(e['versioned_to_evidence_gained'] or 0 for e in eu)} gained, "
+                  f"{sum(e['versioned_to_evidence_lost'] or 0 for e in eu)} lost.", ""]
     else:
         parts += ["No complete evidence run yet.", ""]
 
